@@ -5,7 +5,7 @@ import globals from 'globals'
 import { tryResolveObjectKey } from './ast-utils'
 import type { ParseportOptions } from './options'
 import type { Scope } from './scope'
-import { analyzeScopes } from './scope'
+import { analyzeScopes, resolveReferences } from './scope'
 import { parseport } from '.'
 
 export interface ParseportNodeOptions extends ParseportOptions {
@@ -186,6 +186,44 @@ async function analyzeNode(
       return parseport(source, { ...options, meta: undefined })
     } else {
       return { value: UNKNOWN_VALUE }
+    }
+  }
+  const getReference = async (currentNode: Node, name: string) => {
+    const scope = scopes.get(currentNode)
+    const reference = scope ? scope.get(name) : null
+    if (!reference) {
+      if (name in globalThis && globals.builtin[name]) {
+        return {
+          value: globalThis[name],
+        }
+      }
+      if (options?.context && name in options.context) {
+        return {
+          value: markAsSafe(options.context[name]),
+        }
+      }
+      return {
+        value: UNKNOWN_VALUE,
+      }
+    }
+    const { init, paths } = reference
+    const { value: initialValue } = init ? await evaluate(init) : { value: UNKNOWN_VALUE }
+    if (initialValue === UNKNOWN_VALUE) {
+      if (options?.context && name in options.context) {
+        return {
+          value: markAsSafe(options.context[name]),
+        }
+      }
+    }
+    return {
+      value: paths.reduce<unknown>((value, visitor) => {
+        if (value === UNKNOWN_VALUE) return UNKNOWN_VALUE
+        try {
+          return visitor(value)
+        } catch {
+          return UNKNOWN_VALUE
+        }
+      }, initialValue),
     }
   }
   if (isJSX(node)) {
@@ -373,8 +411,18 @@ async function analyzeNode(
     }
     case 'ExportNamedDeclaration': {
       if (node.declaration) {
+        if (node.declaration.type === 'VariableDeclaration') {
+          const refs = node.declaration.declarations.flatMap(declarator => resolveReferences(declarator))
+          const chunks = await Promise.all(refs.map(async ({ name }) => {
+            const { value } = await getReference(node, name)
+            return { [name]: value }
+          }))
+          return {
+            value: chunks.reduce((exports, chunk) => ({ ...exports, ...chunk }), {}),
+          }
+        }
         const name = getDeclarationName(node.declaration)
-        const value = await evaluate(node.declaration)
+        const { value } = await evaluate(node.declaration)
         return {
           value: name ? { [name]: value } : {},
         }
@@ -392,12 +440,27 @@ async function analyzeNode(
               case 'ExportSpecifier':
                 return [name, (value as {})[resolveString(specifier.exported)]]
               default:
-                return []
+                return [name, UNKNOWN_VALUE]
             }
           })),
         }
       }
-      return { value: UNKNOWN_VALUE }
+      const chunks = await Promise.all(node.specifiers.map<Promise<[string, unknown]>>(async specifier => {
+        const name = resolveString(specifier.exported)
+        switch (specifier.type) {
+          case 'ExportSpecifier': {
+            const { value } = await evaluate(specifier.local)
+            return [name, value]
+          }
+          case 'ExportNamespaceSpecifier':
+          case 'ExportDefaultSpecifier':
+          default:
+            return [name, UNKNOWN_VALUE]
+        }
+      }))
+      return {
+        value: Object.fromEntries(chunks),
+      }
     }
     case 'ExpressionStatement': {
       return evaluate(node.expression)
@@ -427,42 +490,7 @@ async function analyzeNode(
       }
     }
     case 'Identifier': {
-      const scope = scopes.get(node)
-      const reference = scope ? scope.get(node.name) : null
-      if (!reference) {
-        if (node.name in globalThis && globals.builtin[node.name]) {
-          return {
-            value: globalThis[node.name],
-          }
-        }
-        if (options?.context && node.name in options.context) {
-          return {
-            value: markAsSafe(options.context[node.name]),
-          }
-        }
-        return {
-          value: UNKNOWN_VALUE,
-        }
-      }
-      const { init, paths } = reference
-      const { value: initialValue } = init ? await evaluate(init) : { value: UNKNOWN_VALUE }
-      if (initialValue === UNKNOWN_VALUE) {
-        if (options?.context && node.name in options.context) {
-          return {
-            value: markAsSafe(options.context[node.name]),
-          }
-        }
-      }
-      return {
-        value: paths.reduce<unknown>((value, visitor) => {
-          if (value === UNKNOWN_VALUE) return UNKNOWN_VALUE
-          try {
-            return visitor(value)
-          } catch {
-            return UNKNOWN_VALUE
-          }
-        }, initialValue),
-      }
+      return getReference(node, node.name)
     }
     case 'MemberExpression': {
       const { value: object } = await evaluate(node.object)

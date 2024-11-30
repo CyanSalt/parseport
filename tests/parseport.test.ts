@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseport } from '../src'
+import { parseport, parseportCode } from '../src'
 
 describe('parseport', () => {
 
@@ -12,6 +12,20 @@ describe('parseport', () => {
         name: 'ts-module',
         lang: 'ts',
       },
+    })
+  })
+
+})
+
+describe('parseportCode', () => {
+
+  it('should work properly', async () => {
+    const result = await parseportCode(
+      'export const foo = 2 + [1, 3].length as never',
+      { lang: 'ts' },
+    )
+    expect(result.value).toEqual({
+      foo: 4,
     })
   })
 

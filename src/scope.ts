@@ -91,7 +91,7 @@ function resolveChildReferences(
   }
 }
 
-function resolveReferences(node: ScopeDeclaration): NamedReference[] {
+export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
   switch (node.type) {
     // Declaration types
     case 'ImportDeclaration':
