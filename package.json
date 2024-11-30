@@ -1,0 +1,54 @@
+{
+  "name": "parseport",
+  "version": "0.1.0-0",
+  "description": "Get static value from a JavaScript or TypeScript file",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "lint": "eslint --fix './**/*.{js,ts}'",
+    "prepack": "unbuild",
+    "release": "release-it",
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CyanSalt/parseport.git"
+  },
+  "keywords": [
+    "module",
+    "babel"
+  ],
+  "author": "CyanSalt",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/CyanSalt/parseport/issues"
+  },
+  "homepage": "https://github.com/CyanSalt/parseport#readme",
+  "devDependencies": {
+    "@cyansalt/eslint-config": "^4.2.1",
+    "@cyansalt/tsconfig": "^2.2.1",
+    "@release-it/conventional-changelog": "^9.0.3",
+    "@types/babel__traverse": "^7.20.6",
+    "@types/node": "^22",
+    "eslint": "^9.15.0",
+    "release-it": "^17.10.0",
+    "typescript": "^5.7.2",
+    "unbuild": "^2.0.0",
+    "vitest": "^2.1.6"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.26.2",
+    "@babel/types": "^7.26.0",
+    "ast-kit": "^1.3.1",
+    "globals": "^15.12.0"
+  }
+}
