@@ -21,7 +21,7 @@ export async function parseportNode(node: Node, options?: ParseportOptions) {
 
 function attachRelated(value: unknown, related: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    value[PARSEPORT_RELATED] = related
+    Object.defineProperty(value, PARSEPORT_RELATED, { value: related })
   }
   return value
 }
@@ -35,7 +35,7 @@ function extractRelated(value: unknown) {
 
 function markAsSafe(value: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    value[PARSEPORT_SAFE] = true
+    Object.defineProperty(value, PARSEPORT_SAFE, { value: true })
   }
   return value
 }
@@ -181,12 +181,11 @@ function getDeclarationName(declaration: Declaration) {
     : undefined
 }
 
-async function analyzeNode(
-  node: Node,
+function createHelpers(
   values: Map<Node, unknown>,
   scopes: Map<Node, Scope>,
   options?: ParseportOptions,
-): Promise<ParseportResult> {
+) {
   const evaluate = (childNode: Node) => evaluateNode(childNode, values, scopes, options)
   const parseportDeep = (source: string) => {
     if (options?.modules && source in options.modules) {
@@ -209,7 +208,7 @@ async function analyzeNode(
     const scope = scopes.get(currentNode)
     const reference = scope ? scope.get(name) : null
     if (!reference) {
-      if (name in globalThis && globals.builtin[name]) {
+      if (name in globalThis && name in globals.builtin) {
         return {
           value: globalThis[name],
         }
@@ -274,6 +273,28 @@ async function analyzeNode(
       }
     }
   }
+  return {
+    evaluate,
+    parseportDeep,
+    getReference,
+    getReturnValue,
+    getProperty,
+  }
+}
+
+async function analyzeNode(
+  node: Node,
+  values: Map<Node, unknown>,
+  scopes: Map<Node, Scope>,
+  options?: ParseportOptions,
+): Promise<ParseportResult> {
+  const {
+    evaluate,
+    parseportDeep,
+    getReference,
+    getReturnValue,
+    getProperty,
+  } = createHelpers(values, scopes, options)
   if (isJSX(node)) {
     return { value: PARSEPORT_UNKNOWN }
   }
@@ -301,8 +322,7 @@ async function analyzeNode(
           const expression = expressions[index]
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (expression) {
-            // eslint-disable-next-line @typescript-eslint/no-base-to-string
-            return full + part.value.cooked + expression
+            return full + part.value.cooked + expression.value
           }
           return full + part.value.cooked
         }, ''),
@@ -329,28 +349,6 @@ async function analyzeNode(
           }
         } else {
           value.push(element)
-        }
-      }
-      return { value }
-    }
-    case 'ObjectExpression': {
-      const SPREAD = Symbol('...')
-      const chunks = await Promise.all(node.properties.map(async property => {
-        return Promise.all([
-          property.type === 'SpreadElement' ? evaluate(property.argument) : evaluate(property),
-          property.type === 'SpreadElement' ? SPREAD : tryResolveObjectKey(property),
-        ])
-      }))
-      let value = {}
-      for (const [{ value: member }, name] of chunks) {
-        if (name === SPREAD) {
-          if (member !== PARSEPORT_UNKNOWN) {
-            Object.assign(value, member)
-          }
-        } else {
-          if (name !== undefined) {
-            value[name] = member
-          }
         }
       }
       return { value }
@@ -418,7 +416,7 @@ async function analyzeNode(
             return parseportDeep(source)
           }
         }
-        return { value: PARSEPORT_UNKNOWN }
+        return { value: attachRelated(new Promise(() => {}), PARSEPORT_UNKNOWN) }
       }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
@@ -437,6 +435,8 @@ async function analyzeNode(
       if (test === PARSEPORT_UNKNOWN) return { value: test }
       return test ? evaluate(node.consequent) : evaluate(node.alternate)
     }
+    case 'EmptyStatement':
+      return { value: undefined }
     case 'ExportAllDeclaration':
     case 'ImportDeclaration': {
       return parseportDeep(node.source.value)
@@ -476,7 +476,7 @@ async function analyzeNode(
               case 'ExportDefaultSpecifier':
                 return [name, (value as { default: unknown }).default]
               case 'ExportSpecifier':
-                return [name, (value as {})[resolveString(specifier.exported)]]
+                return [name, (value as {})[resolveString(specifier.local)]]
               default:
                 return [name, PARSEPORT_UNKNOWN]
             }
@@ -535,6 +535,28 @@ async function analyzeNode(
       if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       return getProperty(object as {}, node.property, node.computed)
     }
+    case 'ObjectExpression': {
+      const SPREAD = Symbol('...')
+      const chunks = await Promise.all(node.properties.map(async property => {
+        return Promise.all([
+          evaluate(property),
+          property.type === 'SpreadElement' ? SPREAD : tryResolveObjectKey(property),
+        ])
+      }))
+      let value = {}
+      for (const [{ value: member }, name] of chunks) {
+        if (name === SPREAD) {
+          if (member !== PARSEPORT_UNKNOWN) {
+            Object.assign(value, member)
+          }
+        } else {
+          if (name !== undefined) {
+            value[name] = member
+          }
+        }
+      }
+      return { value }
+    }
     case 'ObjectProperty':
       return evaluate(node.value)
     case 'OptionalCallExpression': {
@@ -573,13 +595,18 @@ async function analyzeNode(
       if (!node.expressions.length) return { value: PARSEPORT_UNKNOWN }
       return evaluate(node.expressions[node.expressions.length - 1])
     }
+    case 'SpreadElement':
+      return evaluate(node.argument)
     case 'TaggedTemplateExpression': {
       const { value: callee } = await evaluate(node.tag)
       if (typeof callee === 'function') {
         return getReturnValue(callee, [
-          async () => ({
-            value: await Promise.all(node.quasi.quasis.map(element => evaluate(element))),
-          }),
+          async () => {
+            const quasis = await Promise.all(node.quasi.quasis.map(element => evaluate(element)))
+            return {
+              value: quasis.map(quasi => quasi.value),
+            }
+          },
           ...node.quasi.expressions,
         ])
       }
@@ -615,7 +642,6 @@ async function analyzeNode(
     case 'DirectiveLiteral':
     case 'DoExpression': // Proposal: do expression
     case 'DoWhileStatement':
-    case 'EmptyStatement': // ;
     case 'ExportDefaultSpecifier': // export ->foo<-, {} from 'foo'
     case 'ExportNamespaceSpecifier': // export ->* as foo<-, {} from 'foo'
     case 'ExportSpecifier': // export { ->foo<- } from 'foo'
@@ -647,7 +673,6 @@ async function analyzeNode(
     case 'RegexLiteral':
     case 'RestElement':
     case 'RestProperty':
-    case 'SpreadElement':
     case 'SpreadProperty':
     case 'StaticBlock':
     case 'Super':
