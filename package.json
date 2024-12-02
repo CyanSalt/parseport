@@ -17,6 +17,7 @@
     "lint": "eslint --fix './**/*.{js,ts}'",
     "prepack": "unbuild",
     "release": "release-it",
+    "release:beta-as-latest": "pnpm run release --preRelease=beta --npm.tag=latest",
     "test": "vitest"
   },
   "repository": {
