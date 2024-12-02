@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseport, parseportCode } from '../src'
+import { parseport, PARSEPORT_UNKNOWN, parseportCode } from '../src'
 
 describe('parseport', () => {
 
@@ -11,6 +11,23 @@ describe('parseport', () => {
       default: {
         name: 'ts-module',
         lang: 'ts',
+        extra: PARSEPORT_UNKNOWN,
+      },
+    })
+  })
+
+  it('should be able to parse files recursively', async () => {
+    const result = await parseport('./source/ts-module.ts', {
+      meta: import.meta,
+      deep: true,
+    })
+    expect(result.value).toEqual({
+      default: {
+        name: 'ts-module',
+        lang: 'ts',
+        extra: {
+          flag: true,
+        },
       },
     })
   })
