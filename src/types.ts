@@ -34,7 +34,15 @@ export interface ParseportOptions {
    */
   deep?: boolean,
   /**
-   * Definitions for unknown identifiers
+   * Definition replacement for identifiers
    */
-  context?: Record<string, unknown>,
+  variables?: Record<string, unknown>,
+  /**
+   * Definition replacement for modules
+   */
+  modules?: Record<string, unknown>,
+}
+
+export interface ParseportResult {
+  value: unknown,
 }

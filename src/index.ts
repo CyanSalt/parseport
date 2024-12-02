@@ -1,42 +1,12 @@
-import { createRequire } from 'node:module'
-import { parseportCode } from './code'
-import type { ParseportLoader } from './file'
-import { parseportFile } from './file'
-import { parseportNode } from './node'
-import type { ParseportOptions } from './options'
+export type { ParseportOptions } from './types'
 
-export type ParseportImportMeta = ImportMeta | { filename: string | undefined }
+export type { ParseportImportMeta, ParseportResolver } from './parseport'
+export { parseport, defaultResolver } from './parseport'
 
-export type ParseportResolver = (file: string, meta: ParseportImportMeta) => string | Promise<string>
+export type { ParseportLoader } from './file'
+export { parseportFile, defaultLoader } from './file'
 
-const defaultResolver: ParseportResolver = (file, meta) => {
-  if ('resolve' in meta) {
-    return meta.resolve(file)
-  }
-  if ('url' in meta) {
-    const require = createRequire((meta as ImportMeta).url)
-    return require.resolve(file)
-  }
-  if (meta.filename) {
-    const require = createRequire(meta.filename)
-    return require.resolve(file)
-  }
-  throw new Error('Either "meta" or "file" is required in default resolver.')
-}
+export type { ParseportParser } from './code'
+export { parseportCode, defaultParser } from './code'
 
-export async function parseport(file: string, options?: ParseportOptions) {
-  const resolver = options?.resolver ?? defaultResolver
-  const absolutePath = await resolver(file, options?.meta ?? { filename: options?.file })
-  return parseportFile(absolutePath, options)
-}
-
-export type {
-  ParseportOptions,
-  ParseportLoader,
-}
-
-export {
-  parseportFile,
-  parseportCode,
-  parseportNode,
-}
+export { PARSEPORT_UNKNOWN, parseportNode } from './node'

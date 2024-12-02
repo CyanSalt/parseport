@@ -1,50 +1,57 @@
-import type { BinaryExpression, Declaration, Expression, LogicalExpression, Node, UnaryExpression } from '@babel/types'
+import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, UnaryExpression } from '@babel/types'
 import { isExpression, isFlow, isIdentifier, isJSX, isLiteral, isTypeScript } from '@babel/types'
 import { resolveLiteral, resolveString } from 'ast-kit'
 import globals from 'globals'
 import { tryResolveObjectKey } from './ast-utils'
-import type { ParseportOptions } from './options'
 import type { Scope } from './scope'
 import { analyzeScopes, resolveReferences } from './scope'
+import type { ParseportOptions, ParseportResult } from './types'
 import { parseport } from '.'
 
-export interface ParseportNodeOptions extends ParseportOptions {
-  values?: Map<Node, unknown>,
-}
+export const PARSEPORT_UNKNOWN = Symbol('PARSEPORT_UNKNOWN')
 
-const UNKNOWN_VALUE = Symbol('UNKNOWN_VALUE')
 const PARSEPORT_RELATED = Symbol('PARSEPORT_RELATED')
 const PARSEPORT_SAFE = Symbol('PARSEPORT_SAFE')
 
-export async function parseportNode(
-  node: Node,
-  options?: ParseportNodeOptions,
-) {
-  const values = options?.values ?? new Map()
+export async function parseportNode(node: Node, options?: ParseportOptions) {
+  const values = new Map()
   const scopes = analyzeScopes(node)
   return evaluateNode(node, values, scopes, options)
 }
 
-function attachRelated<T>(value: T, related: unknown) {
+function attachRelated(value: unknown, related: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
     value[PARSEPORT_RELATED] = related
   }
   return value
 }
 
-function markAsSafe<T>(value: T) {
-  if (typeof value === 'function') {
+function extractRelated(value: unknown) {
+  if (value && (typeof value === 'object' || typeof value === 'function')) {
+    return PARSEPORT_RELATED in value ? value[PARSEPORT_RELATED] : PARSEPORT_UNKNOWN
+  }
+  return PARSEPORT_UNKNOWN
+}
+
+function markAsSafe(value: unknown) {
+  if (value && (typeof value === 'object' || typeof value === 'function')) {
     value[PARSEPORT_SAFE] = true
   }
   return value
+}
+
+function isMarkedAsSafe(value: unknown) {
+  if (value && (typeof value === 'object' || typeof value === 'function')) {
+    return PARSEPORT_SAFE in value && value[PARSEPORT_SAFE]
+  }
 }
 
 async function evaluateNode(
   node: Node,
   values: Map<Node, unknown>,
   scopes: Map<Node, Scope>,
-  options?: ParseportNodeOptions,
-) {
+  options?: ParseportOptions,
+): Promise<ParseportResult> {
   if (values.has(node)) {
     return { value: values.get(node) }
   }
@@ -54,12 +61,12 @@ async function evaluateNode(
 }
 
 function callUnary(value: unknown, operator: (value: unknown) => unknown) {
-  if (value === UNKNOWN_VALUE) return UNKNOWN_VALUE
+  if (value === PARSEPORT_UNKNOWN) return PARSEPORT_UNKNOWN
   return operator(value)
 }
 
 function callBinary(a: unknown, b: unknown, operator: (a: unknown, b: unknown) => unknown) {
-  if (a === UNKNOWN_VALUE || b === UNKNOWN_VALUE) return UNKNOWN_VALUE
+  if (a === PARSEPORT_UNKNOWN || b === PARSEPORT_UNKNOWN) return PARSEPORT_UNKNOWN
   return operator(a, b)
 }
 
@@ -86,7 +93,7 @@ function getUnaryOperator(operator: UnaryOperator) {
     case 'throw':
     case 'delete':
     default:
-      return UNKNOWN_VALUE
+      return PARSEPORT_UNKNOWN
   }
 }
 /* eslint-enable no-implicit-coercion */
@@ -163,7 +170,7 @@ function getBinaryOperator(operator: BinaryOperator | AssignmentOperator) {
     case '|>':
       return (a: any, b: any) => b(a)
     default:
-      return UNKNOWN_VALUE
+      return PARSEPORT_UNKNOWN
   }
 }
 /* eslint-enable no-bitwise, eqeqeq */
@@ -178,17 +185,27 @@ async function analyzeNode(
   node: Node,
   values: Map<Node, unknown>,
   scopes: Map<Node, Scope>,
-  options?: ParseportNodeOptions,
-): Promise<{ value: unknown }> {
+  options?: ParseportOptions,
+): Promise<ParseportResult> {
   const evaluate = (childNode: Node) => evaluateNode(childNode, values, scopes, options)
   const parseportDeep = (source: string) => {
+    if (options?.modules && source in options.modules) {
+      return {
+        value: markAsSafe(options.modules[source]),
+      }
+    }
     if (options?.deep) {
       return parseport(source, { ...options, meta: undefined })
     } else {
-      return { value: UNKNOWN_VALUE }
+      return { value: PARSEPORT_UNKNOWN }
     }
   }
   const getReference = async (currentNode: Node, name: string) => {
+    if (options?.variables && name in options.variables) {
+      return {
+        value: markAsSafe(options.variables[name]),
+      }
+    }
     const scope = scopes.get(currentNode)
     const reference = scope ? scope.get(name) : null
     if (!reference) {
@@ -197,37 +214,68 @@ async function analyzeNode(
           value: globalThis[name],
         }
       }
-      if (options?.context && name in options.context) {
-        return {
-          value: markAsSafe(options.context[name]),
-        }
-      }
       return {
-        value: UNKNOWN_VALUE,
+        value: PARSEPORT_UNKNOWN,
       }
     }
     const { init, paths } = reference
-    const { value: initialValue } = init ? await evaluate(init) : { value: UNKNOWN_VALUE }
-    if (initialValue === UNKNOWN_VALUE) {
-      if (options?.context && name in options.context) {
-        return {
-          value: markAsSafe(options.context[name]),
-        }
-      }
-    }
+    if (!init) return { value: PARSEPORT_UNKNOWN }
+    const { value: initialValue } = await evaluate(init)
     return {
       value: paths.reduce<unknown>((value, visitor) => {
-        if (value === UNKNOWN_VALUE) return UNKNOWN_VALUE
+        if (value === PARSEPORT_UNKNOWN) return PARSEPORT_UNKNOWN
         try {
           return visitor(value)
         } catch {
-          return UNKNOWN_VALUE
+          return PARSEPORT_UNKNOWN
         }
       }, initialValue),
     }
   }
+  const getReturnValue = async (
+    callee: Function,
+    lazyArgs: ((() => ParseportResult | Promise<ParseportResult>) | Node)[],
+  ) => {
+    if (isMarkedAsSafe(callee)) {
+      const args = await Promise.all(
+        lazyArgs.map(argument => (typeof argument === 'function' ? argument() : evaluate(argument))),
+      )
+      return {
+        value: markAsSafe(callee(...args.map(arg => arg.value))),
+      }
+    }
+    return {
+      value: extractRelated(callee),
+    }
+  }
+  const getProperty = async (
+    object: {},
+    propertyNode: MemberExpression['property'],
+    computed: boolean,
+  ) => {
+    if (computed) {
+      const { value: property } = await evaluate(propertyNode)
+      if (property === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
+      const value = object[property as PropertyKey]
+      return {
+        value: isMarkedAsSafe(object) ? markAsSafe(value) : value,
+      }
+    } else {
+      if (isIdentifier(propertyNode) || isLiteral(propertyNode)) {
+        const property = resolveString(propertyNode)
+        const value = object[property]
+        return {
+          value: isMarkedAsSafe(object) ? markAsSafe(value) : value,
+        }
+      } else {
+        return {
+          value: PARSEPORT_UNKNOWN,
+        }
+      }
+    }
+  }
   if (isJSX(node)) {
-    return { value: UNKNOWN_VALUE }
+    return { value: PARSEPORT_UNKNOWN }
   }
   if (isTypeScript(node) || isFlow(node)) {
     if (isExpression(node)) {
@@ -240,7 +288,7 @@ async function analyzeNode(
       case 'TSImportEqualsDeclaration':
         return evaluate(node.moduleReference)
       default:
-        return { value: UNKNOWN_VALUE }
+        return { value: PARSEPORT_UNKNOWN }
     }
   }
   if (isLiteral(node)) {
@@ -276,7 +324,7 @@ async function analyzeNode(
       let value: unknown[] = []
       for (const [{ value: element }, shouldSpread] of elements) {
         if (shouldSpread) {
-          if (element !== UNKNOWN_VALUE) {
+          if (element !== PARSEPORT_UNKNOWN) {
             value = value.concat(element)
           }
         } else {
@@ -296,7 +344,7 @@ async function analyzeNode(
       let value = {}
       for (const [{ value: member }, name] of chunks) {
         if (name === SPREAD) {
-          if (member !== UNKNOWN_VALUE) {
+          if (member !== PARSEPORT_UNKNOWN) {
             Object.assign(value, member)
           }
         } else {
@@ -321,7 +369,7 @@ async function analyzeNode(
         return evaluate(node.right)
       }
       const operator = getBinaryOperator(node.operator as AssignmentOperator)
-      if (operator === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
+      if (operator === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       const [{ value: left }, { value: right }] = await Promise.all([
         evaluate(node.left),
         evaluate(node.right),
@@ -330,7 +378,7 @@ async function analyzeNode(
     }
     case 'AwaitExpression': {
       const { value } = await evaluate(node.argument)
-      if (value === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
+      if (value === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       if (
         value
         && typeof value === 'object'
@@ -338,7 +386,7 @@ async function analyzeNode(
         && typeof value.then === 'function'
       ) {
         return {
-          value: PARSEPORT_RELATED in value ? value[PARSEPORT_RELATED] : UNKNOWN_VALUE,
+          value: extractRelated(value),
         }
       }
       return { value }
@@ -346,7 +394,7 @@ async function analyzeNode(
     case 'BinaryExpression':
     case 'LogicalExpression': {
       const operator = getBinaryOperator(node.operator)
-      if (operator === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
+      if (operator === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       const [{ value: left }, { value: right }] = await Promise.all([
         evaluate(node.left),
         evaluate(node.right),
@@ -358,7 +406,7 @@ async function analyzeNode(
         return stmt.type === 'ReturnStatement'
           || stmt.type === 'ThrowStatement'
       })
-      if (!firstReturnStatement || firstReturnStatement.type === 'ThrowStatement') return { value: UNKNOWN_VALUE }
+      if (!firstReturnStatement || firstReturnStatement.type === 'ThrowStatement') return { value: PARSEPORT_UNKNOWN }
       return evaluate(firstReturnStatement)
     }
     case 'CallExpression': {
@@ -370,23 +418,13 @@ async function analyzeNode(
             return parseportDeep(source)
           }
         }
-        return { value: UNKNOWN_VALUE }
+        return { value: PARSEPORT_UNKNOWN }
       }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        if (PARSEPORT_RELATED in callee) {
-          return {
-            value: callee[PARSEPORT_RELATED],
-          }
-        }
-        if (PARSEPORT_SAFE in callee && callee[PARSEPORT_SAFE]) {
-          const args = await Promise.all(node.arguments.map(argument => evaluate(argument)))
-          return {
-            value: callee(...args.map(arg => arg.value)),
-          }
-        }
+        return getReturnValue(callee, node.arguments)
       }
-      return { value: UNKNOWN_VALUE }
+      return { value: PARSEPORT_UNKNOWN }
     }
     case 'ClassDeclaration':
     case 'ClassExpression': {
@@ -396,7 +434,7 @@ async function analyzeNode(
     }
     case 'ConditionalExpression': {
       const { value: test } = await evaluate(node.test)
-      if (test === UNKNOWN_VALUE) return { value: test }
+      if (test === PARSEPORT_UNKNOWN) return { value: test }
       return test ? evaluate(node.consequent) : evaluate(node.alternate)
     }
     case 'ExportAllDeclaration':
@@ -440,7 +478,7 @@ async function analyzeNode(
               case 'ExportSpecifier':
                 return [name, (value as {})[resolveString(specifier.exported)]]
               default:
-                return [name, UNKNOWN_VALUE]
+                return [name, PARSEPORT_UNKNOWN]
             }
           })),
         }
@@ -455,7 +493,7 @@ async function analyzeNode(
           case 'ExportNamespaceSpecifier':
           case 'ExportDefaultSpecifier':
           default:
-            return [name, UNKNOWN_VALUE]
+            return [name, PARSEPORT_UNKNOWN]
         }
       }))
       return {
@@ -494,68 +532,24 @@ async function analyzeNode(
     }
     case 'MemberExpression': {
       const { value: object } = await evaluate(node.object)
-      if (object === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
-      if (node.computed) {
-        const { value: property } = await evaluate(node.property)
-        if (property === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
-        return {
-          value: (object as {})[property as PropertyKey],
-        }
-      } else {
-        if (isIdentifier(node.property) || isLiteral(node.property)) {
-          const property = resolveString(node.property)
-          return {
-            value: (object as {})[property],
-          }
-        } else {
-          return {
-            value: UNKNOWN_VALUE,
-          }
-        }
-      }
+      if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
+      return getProperty(object as {}, node.property, node.computed)
     }
     case 'ObjectProperty':
       return evaluate(node.value)
     case 'OptionalCallExpression': {
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        if (PARSEPORT_RELATED in callee) {
-          return {
-            value: callee[PARSEPORT_RELATED],
-          }
-        }
-        if (PARSEPORT_SAFE in callee && callee[PARSEPORT_SAFE]) {
-          const args = await Promise.all(node.arguments.map(argument => evaluate(argument)))
-          return {
-            value: callee(...args),
-          }
-        }
+        return getReturnValue(callee, node.arguments)
       }
       if (callee === undefined || callee === null) return { value: undefined }
-      return { value: UNKNOWN_VALUE }
+      return { value: PARSEPORT_UNKNOWN }
     }
     case 'OptionalMemberExpression': {
       const { value: object } = await evaluate(node.object)
-      if (object === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
+      if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       if (object === undefined || object === null) return { value: undefined }
-      if (node.computed) {
-        const { value: property } = await evaluate(node.property)
-        if (property === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
-        return {
-          value: (object as {})[property as PropertyKey],
-        }
-      } else {
-        if (isIdentifier(node.property) || isLiteral(node.property)) {
-          const property = resolveString(node.property)
-          return {
-            value: (object as {})[property],
-          }
-        } else {
-          return {
-            value: UNKNOWN_VALUE,
-          }
-        }
-      }
+      return getProperty(object, node.property, node.computed)
     }
     case 'Program': {
       const exportStatements = node.body.filter(stmt => {
@@ -567,7 +561,7 @@ async function analyzeNode(
       const chunks = await Promise.all(exportStatements.map(stmt => evaluate(stmt)))
       return {
         value: chunks.reduce<{}>((exports, { value }) => {
-          return { ...exports, ...(value === UNKNOWN_VALUE ? {} : value as {}) }
+          return { ...exports, ...(value === PARSEPORT_UNKNOWN ? {} : value as {}) }
         }, {}),
       }
     }
@@ -576,17 +570,20 @@ async function analyzeNode(
         ? evaluate(node.argument)
         : { value: undefined }
     case 'SequenceExpression': {
-      if (!node.expressions.length) return { value: UNKNOWN_VALUE }
+      if (!node.expressions.length) return { value: PARSEPORT_UNKNOWN }
       return evaluate(node.expressions[node.expressions.length - 1])
     }
     case 'TaggedTemplateExpression': {
       const { value: callee } = await evaluate(node.tag)
-      if (typeof callee === 'function' && PARSEPORT_RELATED in callee) {
-        return {
-          value: callee[PARSEPORT_RELATED],
-        }
+      if (typeof callee === 'function') {
+        return getReturnValue(callee, [
+          async () => ({
+            value: await Promise.all(node.quasi.quasis.map(element => evaluate(element))),
+          }),
+          ...node.quasi.expressions,
+        ])
       }
-      return { value: UNKNOWN_VALUE }
+      return { value: PARSEPORT_UNKNOWN }
     }
     case 'TemplateElement':
       return {
@@ -594,7 +591,7 @@ async function analyzeNode(
       }
     case 'UnaryExpression': {
       const operator = getUnaryOperator(node.operator)
-      if (operator === UNKNOWN_VALUE) return { value: UNKNOWN_VALUE }
+      if (operator === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       const { value: argument } = await evaluate(node.argument)
       return { value: callUnary(argument, operator) }
     }
@@ -669,6 +666,6 @@ async function analyzeNode(
     case 'WithStatement':
     case 'YieldExpression':
     default:
-      return { value: UNKNOWN_VALUE }
+      return { value: PARSEPORT_UNKNOWN }
   }
 }
