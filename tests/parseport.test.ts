@@ -1,5 +1,6 @@
+import path from 'node:path'
 import { describe, expect, it, test } from 'vitest'
-import { parseport, PARSEPORT_UNKNOWN, parseportCode } from '../src'
+import { parseport, PARSEPORT_UNKNOWN, parseportCode, parseportFile } from '../src'
 
 describe('parseport', () => {
 
@@ -28,6 +29,21 @@ describe('parseport', () => {
         extra: {
           flag: true,
         },
+      },
+    })
+  })
+
+})
+
+describe('parseportFile', () => {
+
+  it('should work properly', async () => {
+    const result = await parseportFile(path.resolve(import.meta.dirname, './source/ts-module.ts'))
+    expect(result.value).toEqual({
+      default: {
+        name: 'ts-module',
+        lang: 'ts',
+        extra: PARSEPORT_UNKNOWN,
       },
     })
   })

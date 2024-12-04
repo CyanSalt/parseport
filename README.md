@@ -21,7 +21,7 @@ import {
   parseportNode,
 } from 'parseport'
 
-await parseportFile('/path/to/file', { meta: import.meta }) // { value: ... }
+await parseportFile('/path/to/file') // { value: ... }
 
 await parseportCode('export default 2 + [1, 3].length as never', { lang: 'ts' }) // { value: { default: 4 } }
 
