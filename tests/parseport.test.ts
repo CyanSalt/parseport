@@ -72,6 +72,24 @@ describe('parseportCode', () => {
     })
   })
 
+  test('ts enum', async () => {
+    const result = await parseportCode(
+      `
+      enum foo { bar, baz }
+      export default foo
+      `,
+      { lang: 'ts' },
+    )
+    expect(result.value).toEqual({
+      default: {
+        bar: 0,
+        0: 'bar',
+        baz: 1,
+        1: 'baz',
+      },
+    })
+  })
+
   test('ts import equals', async () => {
     const result = await parseportCode(
       `
@@ -98,6 +116,22 @@ describe('parseportCode', () => {
     )
     expect(result.value).toEqual({
       foo: PARSEPORT_UNKNOWN,
+    })
+  })
+
+  test('ts namespace', async () => {
+    const result = await parseportCode(
+      `
+      export namespace foo {
+        export const bar = 1
+      }
+      `,
+      { lang: 'ts' },
+    )
+    expect(result.value).toEqual({
+      foo: {
+        bar: 1,
+      },
     })
   })
 

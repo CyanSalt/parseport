@@ -1,4 +1,4 @@
-import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, UnaryExpression } from '@babel/types'
+import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression } from '@babel/types'
 import { isExpression, isFlow, isIdentifier, isJSX, isLiteral, isTypeScript } from '@babel/types'
 import { resolveLiteral, resolveString } from 'ast-kit'
 import globals from 'globals'
@@ -199,7 +199,7 @@ function createHelpers(
       return { value: PARSEPORT_UNKNOWN }
     }
   }
-  const getReference = async (currentNode: Node, name: string) => {
+  const evaluateReference = async (currentNode: Node, name: string) => {
     if (options?.variables && name in options.variables) {
       return {
         value: markAsSafe(options.variables[name]),
@@ -231,7 +231,7 @@ function createHelpers(
       }, initialValue),
     }
   }
-  const getReturnValue = async (
+  const applyStatic = async (
     callee: Function,
     lazyArgs: ((() => ParseportResult | Promise<ParseportResult>) | Node)[],
   ) => {
@@ -247,7 +247,7 @@ function createHelpers(
       value: extractRelated(callee),
     }
   }
-  const getProperty = async (
+  const evaluateProperty = async (
     object: {},
     propertyNode: MemberExpression['property'],
     computed: boolean,
@@ -273,12 +273,27 @@ function createHelpers(
       }
     }
   }
+  const evaluateExports = async (body: Statement[]) => {
+    const exportStatements = body.filter(stmt => {
+      return stmt.type === 'ExportAllDeclaration'
+        || stmt.type === 'ExportDefaultDeclaration'
+        || stmt.type === 'ExportNamedDeclaration'
+        || stmt.type === 'TSExportAssignment'
+    })
+    const chunks = await Promise.all(exportStatements.map(stmt => evaluate(stmt)))
+    return {
+      value: chunks.reduce<{}>((exports, { value }) => {
+        return { ...exports, ...(value === PARSEPORT_UNKNOWN ? {} : value as {}) }
+      }, {}),
+    }
+  }
   return {
     evaluate,
     parseportDeep,
-    getReference,
-    getReturnValue,
-    getProperty,
+    evaluateReference,
+    applyStatic,
+    evaluateProperty,
+    evaluateExports,
   }
 }
 
@@ -291,9 +306,10 @@ async function analyzeNode(
   const {
     evaluate,
     parseportDeep,
-    getReference,
-    getReturnValue,
-    getProperty,
+    evaluateReference,
+    applyStatic,
+    evaluateProperty,
+    evaluateExports,
   } = createHelpers(values, scopes, options)
   if (isJSX(node)) {
     return { value: PARSEPORT_UNKNOWN }
@@ -304,10 +320,33 @@ async function analyzeNode(
     }
     // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (node.type) {
+      case 'TSEnumDeclaration': {
+        const chunks = await Promise.all(node.members.map(member => {
+          return Promise.all([
+            member.initializer ? evaluate(member.initializer) : undefined,
+            resolveString(member.id),
+          ])
+        }))
+        let value: Record<string, number> & Record<number, string> = {}
+        let current = 0
+        for (const [init, name] of chunks) {
+          if (init) {
+            current = init.value as number
+          }
+          value[current] = name
+          value[name] = current
+          current = typeof current === 'number' ? current + 1 : undefined as never
+        }
+        return { value }
+      }
       case 'TSExternalModuleReference':
         return parseportDeep(node.expression.value)
       case 'TSImportEqualsDeclaration':
         return evaluate(node.moduleReference)
+      case 'TSModuleBlock':
+        return evaluateExports(node.body)
+      case 'TSModuleDeclaration':
+        return evaluate(node.body)
       default:
         return { value: PARSEPORT_UNKNOWN }
     }
@@ -420,7 +459,7 @@ async function analyzeNode(
       }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return getReturnValue(callee, node.arguments)
+        return applyStatic(callee, node.arguments)
       }
       return { value: PARSEPORT_UNKNOWN }
     }
@@ -452,7 +491,7 @@ async function analyzeNode(
         if (node.declaration.type === 'VariableDeclaration') {
           const refs = node.declaration.declarations.flatMap(declarator => resolveReferences(declarator))
           const chunks = await Promise.all(refs.map(async ({ name }) => {
-            const { value } = await getReference(node, name)
+            const { value } = await evaluateReference(node, name)
             return { [name]: value }
           }))
           return {
@@ -528,12 +567,12 @@ async function analyzeNode(
       }
     }
     case 'Identifier': {
-      return getReference(node, node.name)
+      return evaluateReference(node, node.name)
     }
     case 'MemberExpression': {
       const { value: object } = await evaluate(node.object)
       if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
-      return getProperty(object as {}, node.property, node.computed)
+      return evaluateProperty(object as {}, node.property, node.computed)
     }
     case 'ObjectExpression': {
       const SPREAD = Symbol('...')
@@ -562,7 +601,7 @@ async function analyzeNode(
     case 'OptionalCallExpression': {
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return getReturnValue(callee, node.arguments)
+        return applyStatic(callee, node.arguments)
       }
       if (callee === undefined || callee === null) return { value: undefined }
       return { value: PARSEPORT_UNKNOWN }
@@ -571,21 +610,10 @@ async function analyzeNode(
       const { value: object } = await evaluate(node.object)
       if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       if (object === undefined || object === null) return { value: undefined }
-      return getProperty(object, node.property, node.computed)
+      return evaluateProperty(object, node.property, node.computed)
     }
     case 'Program': {
-      const exportStatements = node.body.filter(stmt => {
-        return stmt.type === 'ExportAllDeclaration'
-          || stmt.type === 'ExportDefaultDeclaration'
-          || stmt.type === 'ExportNamedDeclaration'
-          || stmt.type === 'TSExportAssignment'
-      })
-      const chunks = await Promise.all(exportStatements.map(stmt => evaluate(stmt)))
-      return {
-        value: chunks.reduce<{}>((exports, { value }) => {
-          return { ...exports, ...(value === PARSEPORT_UNKNOWN ? {} : value as {}) }
-        }, {}),
-      }
+      return evaluateExports(node.body)
     }
     case 'ReturnStatement':
       return node.argument
@@ -600,7 +628,7 @@ async function analyzeNode(
     case 'TaggedTemplateExpression': {
       const { value: callee } = await evaluate(node.tag)
       if (typeof callee === 'function') {
-        return getReturnValue(callee, [
+        return applyStatic(callee, [
           async () => {
             const quasis = await Promise.all(node.quasi.quasis.map(element => evaluate(element)))
             return {

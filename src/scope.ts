@@ -1,4 +1,4 @@
-import type { CatchClause, ClassDeclaration, Expression, FunctionDeclaration, FunctionExpression, ImportDeclaration, LVal, Node, TSImportEqualsDeclaration, VariableDeclarator } from '@babel/types'
+import type { CatchClause, ClassDeclaration, Expression, FunctionDeclaration, FunctionExpression, ImportDeclaration, LVal, Node, TSEnumDeclaration, TSImportEqualsDeclaration, VariableDeclarator } from '@babel/types'
 import { isExpression, isIdentifier } from '@babel/types'
 import { resolveString, walkAST } from 'ast-kit'
 import { tryResolveObjectKey } from './ast-utils'
@@ -13,7 +13,7 @@ export interface Reference {
 export type FunctionParam = FunctionDeclaration['params'][number]
 export type CatchParam = NonNullable<CatchClause['param']>
 export type ScopeDeclaration = ImportDeclaration | TSImportEqualsDeclaration
-  | FunctionDeclaration | FunctionExpression | ClassDeclaration
+  | FunctionDeclaration | FunctionExpression | ClassDeclaration | TSEnumDeclaration
   | VariableDeclarator
   | FunctionParam | CatchParam
 
@@ -129,6 +129,7 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
     case 'FunctionDeclaration':
     case 'FunctionExpression':
     case 'ClassDeclaration':
+    case 'TSEnumDeclaration':
       if (!node.id) return []
       return [
         {
@@ -208,6 +209,7 @@ export function analyzeScopes(ast: Node) {
         case 'FunctionDeclaration':
         case 'FunctionExpression':
         case 'ClassDeclaration':
+        case 'TSEnumDeclaration':
           scope.add(node, false)
           break
         case 'VariableDeclaration':
