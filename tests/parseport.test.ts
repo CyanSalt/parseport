@@ -52,6 +52,16 @@ describe('parseportFile', () => {
 
 describe('parseportCode', () => {
 
+  test('json syntax', async () => {
+    const result = await parseportCode(
+      `{ "score": 147 }`,
+      { lang: 'json' },
+    )
+    expect(result.value).toEqual({
+      score: 147,
+    })
+  })
+
   test('jsx syntax', async () => {
     const result = await parseportCode(
       `export const node = <></>`,
@@ -379,6 +389,45 @@ describe('parseportCode', () => {
       bar: Infinity,
       baz: Date,
       qux: 'good boy',
+    })
+  })
+
+  test('import', async () => {
+    const result = await parseportCode(
+      `
+      import * as foo from 'foo'
+      import value, { named } from 'foo'
+      import interop from 'bar'
+
+      export {
+        foo,
+        value,
+        named,
+        interop,
+      }
+      `,
+      {
+        modules: {
+          foo: {
+            default: 1,
+            named: 2,
+          },
+          bar: {
+            named: 3,
+          },
+        },
+      },
+    )
+    expect(result.value).toEqual({
+      foo: {
+        default: 1,
+        named: 2,
+      },
+      value: 1,
+      named: 2,
+      interop: {
+        named: 3,
+      },
     })
   })
 

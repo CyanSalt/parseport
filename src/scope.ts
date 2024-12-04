@@ -104,7 +104,10 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
               paths: [],
             }
           case 'ImportDefaultSpecifier': {
-            const currentPath = (value: { default: unknown }) => value.default
+            const currentPath = (value: { default: unknown }) => {
+              // ES Module Interop
+              return 'default' in value ? value.default : value
+            }
             return {
               name: resolveString(specifier.local),
               init: node,
