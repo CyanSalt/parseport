@@ -202,7 +202,6 @@ export function analyzeScopes(ast: Node) {
   walkAST(ast, {
     enter(node, parent) {
       // TODO: imports
-      // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
       switch (node.type) {
         case 'ImportDeclaration':
         case 'TSImportEqualsDeclaration':
@@ -221,7 +220,6 @@ export function analyzeScopes(ast: Node) {
           break
       }
       let newScope: Scope | undefined
-      // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
       switch (node.type) {
         case 'FunctionDeclaration':
         case 'FunctionExpression': {

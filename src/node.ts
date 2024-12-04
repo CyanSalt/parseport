@@ -319,7 +319,6 @@ async function analyzeNode(
     if (isExpression(node)) {
       return evaluate(node.expression)
     }
-    // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (node.type) {
       case 'TSEnumDeclaration': {
         const chunks = await Promise.all(node.members.map(member => {
@@ -651,74 +650,6 @@ async function analyzeNode(
       const { value: argument } = await evaluate(node.argument)
       return { value: callUnary(argument, operator) }
     }
-
-    case 'ArgumentPlaceholder':
-    case 'ArrayPattern': // const ->[a, b]<- = ...
-    case 'AssignmentPattern':
-    case 'BindExpression': // a::b (Proposal)
-    case 'BreakStatement': // break
-    case 'CatchClause': // try {} ->catch (e) {}<-
-    case 'ClassAccessorProperty':
-    case 'ClassBody':
-    case 'ClassMethod':
-    case 'ClassPrivateMethod':
-    case 'ClassPrivateProperty':
-    case 'ClassProperty':
-    case 'ContinueStatement': // continue
-    case 'DebuggerStatement': // debugger
-    case 'Decorator': // Proposal: decorators
-    case 'Directive':
-    case 'DirectiveLiteral':
-    case 'DoExpression': // Proposal: do expression
-    case 'DoWhileStatement':
-    case 'ExportDefaultSpecifier': // export ->foo<-, {} from 'foo'
-    case 'ExportNamespaceSpecifier': // export ->* as foo<-, {} from 'foo'
-    case 'ExportSpecifier': // export { ->foo<- } from 'foo'
-    case 'ForInStatement': // for (const key in object) {}
-    case 'ForOfStatement': // for (const item of array) {}
-    case 'ForStatement': // for (;;) {}
-    case 'IfStatement': // if (foo) {}
-    case 'Import':
-    case 'ImportAttribute':
-    case 'ImportDefaultSpecifier': // import ->foo<- from 'foo'
-    case 'ImportExpression':
-    case 'ImportNamespaceSpecifier':
-    case 'ImportSpecifier':
-    case 'InterpreterDirective':
-    case 'LabeledStatement': // foo: {}
-    case 'MetaProperty': // ->import.meta<- || ->new.target<-
-    case 'ModuleExpression':
-    case 'NewExpression': // new Foo() (even if Array or Promise, etc)
-    case 'Noop':
-    case 'NumberLiteral':
-    case 'ObjectPattern': // const ->{ foo }<= = ...
-    case 'ParenthesizedExpression':
-    case 'PipelineBareFunction':
-    case 'PipelinePrimaryTopicReference':
-    case 'PipelineTopicExpression':
-    case 'Placeholder':
-    case 'PrivateName':
-    case 'RecordExpression':
-    case 'RegexLiteral':
-    case 'RestElement':
-    case 'RestProperty':
-    case 'SpreadProperty':
-    case 'StaticBlock':
-    case 'Super':
-    case 'SwitchCase':
-    case 'SwitchStatement':
-    case 'ThisExpression':
-    case 'ThrowStatement':
-    case 'TopicReference':
-    case 'TryStatement':
-    case 'TupleExpression':
-    case 'UpdateExpression':
-    case 'V8IntrinsicIdentifier':
-    case 'VariableDeclaration':
-    case 'VariableDeclarator':
-    case 'WhileStatement':
-    case 'WithStatement':
-    case 'YieldExpression':
     default:
       return { value: PARSEPORT_UNKNOWN }
   }
