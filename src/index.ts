@@ -1,7 +1,7 @@
 export type { ParseportOptions } from './types'
 
 export type { ParseportImportMeta, ParseportResolver } from './parseport'
-export { parseport, defaultResolver } from './parseport'
+export { parseport, defaultResolver, nodeResolver } from './parseport'
 
 export type { ParseportLoader } from './file'
 export { parseportFile, defaultLoader } from './file'
