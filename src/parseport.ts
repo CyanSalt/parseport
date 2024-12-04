@@ -17,8 +17,13 @@ export type ParseportImportMeta = ImportMeta | ParseportDeepImportMeta
 export type ParseportResolver = (file: string, meta: ParseportImportMeta) => string | Promise<string>
 
 export const defaultResolver: ParseportResolver = async (file, meta) => {
-  if (meta.filename) {
-    const directory = path.dirname(meta.filename)
+  let directory: string | undefined
+  if (meta.dirname) {
+    directory = meta.dirname
+  } else if (meta.filename) {
+    directory = path.dirname(meta.filename)
+  }
+  if (directory) {
     const factory = new ResolverFactory({
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
     })
@@ -28,13 +33,6 @@ export const defaultResolver: ParseportResolver = async (file, meta) => {
     }
     return result.path!
   }
-  if ('resolve' in meta) {
-    return meta.resolve(file)
-  }
-  if ('url' in meta) {
-    const require = createRequire((meta as ImportMeta).url)
-    return require.resolve(file)
-  }
   throw new Error('Either "meta" or "file" is required in default resolver.')
 }
 
@@ -42,8 +40,8 @@ export const nodeResolver: ParseportResolver = async (file, meta) => {
   if ('resolve' in meta) {
     return meta.resolve(file)
   }
-  if ('url' in meta) {
-    const require = createRequire((meta as ImportMeta).url)
+  if (meta.url) {
+    const require = createRequire(meta.url)
     return require.resolve(file)
   }
   throw new Error('Either "meta" or "file" is required in Node resolver.')
