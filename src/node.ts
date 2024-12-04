@@ -42,8 +42,9 @@ function markAsSafe(value: unknown) {
 
 function isMarkedAsSafe(value: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    return PARSEPORT_SAFE in value && value[PARSEPORT_SAFE]
+    return PARSEPORT_SAFE in value && value[PARSEPORT_SAFE] as true
   }
+  return false
 }
 
 async function evaluateNode(
