@@ -4,6 +4,25 @@
 
 Get static value from a JavaScript or TypeScript file.
 
+```ts
+// my-module.ts
+export const name = 'my-module'
+
+export default function () {
+  return `My name is "${name}"`
+}
+```
+
+```ts
+// another-file.ts
+import { parseport } from 'parseport'
+
+const { value } = await parseport('./file', { meta: import.meta })
+
+value.name // 'my-module'
+value.default() // 'My name is "my-module"'
+```
+
 ## Usage
 
 ```ts
