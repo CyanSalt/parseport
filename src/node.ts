@@ -397,7 +397,7 @@ async function analyzeNode(
       const { value: body } = await evaluate(node.body)
       return {
         value: node.async
-          ? attachRelated(async () => body, attachRelated(new Promise(() => {}), body))
+          ? attachRelated(async () => body, attachRelated(Promise.resolve(body), body))
           : attachRelated(() => body, body),
       }
     }
@@ -455,7 +455,7 @@ async function analyzeNode(
             return parseportDeep(source)
           }
         }
-        return { value: attachRelated(new Promise(() => {}), PARSEPORT_UNKNOWN) }
+        return { value: attachRelated(Promise.resolve(PARSEPORT_UNKNOWN), PARSEPORT_UNKNOWN) }
       }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
@@ -556,7 +556,7 @@ async function analyzeNode(
             async function () {
               return body
             },
-            attachRelated(new Promise(() => {}), body),
+            attachRelated(Promise.resolve(body), body),
           )
           : attachRelated(
             function () {
