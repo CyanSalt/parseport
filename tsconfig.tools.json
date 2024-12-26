@@ -2,8 +2,7 @@
   "extends": "@cyansalt/tsconfig/tsconfig.app",
   "include": [
     "**/*.js",
-    "**/*.ts",
-    "**/*.vue"
+    "**/*.ts"
   ],
   "exclude": [
     "**/dist",
