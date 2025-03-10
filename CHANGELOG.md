@@ -1,5 +1,21 @@
 
 
+## [0.1.0-beta.1](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.0...v0.1.0-beta.1) (2025-03-10)
+
+### Features
+
+* transform ts enums ([35c2d46](https://github.com/CyanSalt/parseport/commit/35c2d4691dc73aa9c74d2bee0360b48328eac385))
+
+### Bug Fixes
+
+* add nodeResolver ([53733c1](https://github.com/CyanSalt/parseport/commit/53733c14b112f61cb953fac732094f56bbaf99d0))
+* awaitable promise ([e04da09](https://github.com/CyanSalt/parseport/commit/e04da09a7811874be04cd14fd9dcee14220ae3ba))
+* default lang ([e725380](https://github.com/CyanSalt/parseport/commit/e7253802b660948ceadeb9a3734742cea2df0ccd))
+* es module interop ([4d7287c](https://github.com/CyanSalt/parseport/commit/4d7287c49a65a98ee32401954994d3aad920b058))
+* separate resolvers ([f8ff46a](https://github.com/CyanSalt/parseport/commit/f8ff46a195da24b24b681e96c1080617b7230667))
+* transform json to ast ([6e943ae](https://github.com/CyanSalt/parseport/commit/6e943ae93cafdb5a77982cb63f50c1ac66aa8036))
+* typings ([a31e14f](https://github.com/CyanSalt/parseport/commit/a31e14f7079d082ec074de3e9721d3ed703a759b))
+
 ## 0.1.0-beta.0 (2024-12-02)
 
 ### Features
