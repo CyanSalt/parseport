@@ -1,5 +1,11 @@
 
 
+## [0.1.0-beta.2](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2025-03-10)
+
+### Bug Fixes
+
+* published files ([15b0c61](https://github.com/CyanSalt/parseport/commit/15b0c61826dcc05a8df12b6a3f665808f909922c))
+
 ## [0.1.0-beta.1](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.0...v0.1.0-beta.1) (2025-03-10)
 
 ### Features
