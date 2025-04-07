@@ -113,6 +113,23 @@ Parseport will choose different Babel configurations based on `lang`, which will
 
 `loader` accepts the text content of the file and returns the `Program` node of the Babel AST synchronously or asynchronously. Similarly, thrown in `parser` will also result in `PARSEPORT_UNKNOWN`.
 
+`parser` also provides integration capabilities with non-JavaScript/TypeScript syntax. For example, you can combine custom parser with the built-in parser.
+
+```ts
+import { defaultParser, parseport } from 'parseport'
+
+const { value } = await parseport('./file', {
+  meta: import.meta,
+  parser: (code, file, lang) => {
+    if (lang === 'my-lang') {
+      const ast = parseMyLang(code)
+      return ast
+    }
+    return defaultParser(code, file, lang)
+  },
+})
+```
+
 It can be roughly considered that `parser` transforms the first argument of `parseportCode` and the first argument of `parseportFile` into the first argument of `parseportNode`.
 
 ### Traversing
