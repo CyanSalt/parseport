@@ -1,5 +1,11 @@
 
 
+## [0.1.0-beta.3](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2025-04-07)
+
+### Features
+
+* expose `createEvaluatedNode` ([707d669](https://github.com/CyanSalt/parseport/commit/707d6695ccea68be8d320050b045ff69e37076f8))
+
 ## [0.1.0-beta.2](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2025-03-10)
 
 ### Bug Fixes
