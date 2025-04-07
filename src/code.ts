@@ -1,15 +1,34 @@
 import type { Node } from '@babel/types'
-import { valueToNode } from '@babel/types'
 import { babelParse, getLang } from 'ast-kit'
 import { PARSEPORT_UNKNOWN, parseportNode } from './node'
 import type { ParseportOptions } from './types'
 
-export type ParseportParser = (code: string, file?: string, lang?: string) => Node | Promise<Node>
+const PARSEPORT_EVALUATED = Symbol('PARSEPORT_EVALUATED')
+
+interface ParseportEvaluatedNode {
+  type: typeof PARSEPORT_EVALUATED,
+  value: unknown,
+}
+
+export type ParseportNode = Node | ParseportEvaluatedNode
+
+export function createEvaluatedNode(value: unknown): ParseportEvaluatedNode {
+  return {
+    type: PARSEPORT_EVALUATED,
+    value,
+  }
+}
+
+function isEvaluatedNode(node: ParseportNode): node is ParseportEvaluatedNode {
+  return node.type === PARSEPORT_EVALUATED
+}
+
+export type ParseportParser = (code: string, file?: string, lang?: string) => ParseportNode | Promise<ParseportNode>
 
 export const defaultParser: ParseportParser = (code, file, lang) => {
   if (lang === 'json') {
     const value = JSON.parse(code)
-    return valueToNode(value)
+    return createEvaluatedNode(value)
   }
   return babelParse(code, lang)
 }
@@ -17,11 +36,14 @@ export const defaultParser: ParseportParser = (code, file, lang) => {
 export async function parseportCode(code: string, options?: ParseportOptions) {
   const parser = options?.parser ?? defaultParser
   const lang = options?.lang ?? (options?.file ? getLang(options.file) : undefined)
-  let ast: Node
+  let ast: ParseportNode
   try {
     ast = await parser(code, options?.file, lang)
   } catch {
     return { value: PARSEPORT_UNKNOWN }
+  }
+  if (isEvaluatedNode(ast)) {
+    return { value: ast.value }
   }
   return parseportNode(ast, options)
 }
