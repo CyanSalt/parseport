@@ -520,4 +520,25 @@ describe('parseportCode', () => {
     })
   })
 
+  test('native', async () => {
+    const result = await parseportCode(
+      `
+      const defaultValue = { bar: false }
+
+      export default Object.assign({ foo: true }, defaultValue)
+      `,
+      {
+        variables: {
+          Object,
+        },
+      },
+    )
+    expect(result.value).toEqual({
+      default: {
+        foo: true,
+        bar: false,
+      },
+    })
+  })
+
 })

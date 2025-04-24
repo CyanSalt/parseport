@@ -153,6 +153,21 @@ const { value } = await parseportCode(`
 })
 ```
 
+For example, `parseport` does not execute any unknown functions that not declared in `variables` and `modules` by default. If you want to get the result of some built-in function (such as `Object.assign`), you can add it to `variables`:
+
+```ts
+const { value } = await parseportCode(`
+  const defaultValue = { bar: false }
+
+  export default Object.assign({ foo: true }, defaultValue)
+`, {
+  meta: import.meta,
+  variables: {
+    Object,
+  },
+})
+```
+
 - `modules`: Similar to `variables`, this object can be used to declare modules that you want to replace. The above code is equivalent to the following code:
 
 ```ts
