@@ -5,7 +5,7 @@ import { parseport, PARSEPORT_UNKNOWN, parseportCode, parseportFile } from '../s
 describe('parseport', () => {
 
   it('should work properly', async () => {
-    const result = await parseport('./source/ts-module.ts', {
+    const result = await parseport('./fixtures/ts-module.ts', {
       meta: import.meta,
     })
     expect(result.value).toEqual({
@@ -18,7 +18,7 @@ describe('parseport', () => {
   })
 
   it('should be able to parse files recursively', async () => {
-    const result = await parseport('./source/ts-module.ts', {
+    const result = await parseport('./fixtures/ts-module.ts', {
       meta: import.meta,
       deep: true,
     })
@@ -38,7 +38,7 @@ describe('parseport', () => {
 describe('parseportFile', () => {
 
   it('should work properly', async () => {
-    const result = await parseportFile(path.resolve(import.meta.dirname, './source/ts-module.ts'))
+    const result = await parseportFile(path.resolve(import.meta.dirname, './fixtures/ts-module.ts'))
     expect(result.value).toEqual({
       default: {
         name: 'ts-module',
