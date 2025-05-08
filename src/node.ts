@@ -1,4 +1,4 @@
-import type { BinaryExpression, ClassMethod, ClassProperty, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression } from '@babel/types'
+import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression } from '@babel/types'
 import { isExpression, isFlow, isIdentifier, isJSX, isLiteral, isTypeScript } from '@babel/types'
 import type { ObjectPropertyLike } from 'ast-kit'
 import { resolveLiteral, resolveString } from 'ast-kit'
@@ -477,9 +477,7 @@ async function analyzeNode(
     case 'ClassBody': {
       const chunks = await Promise.all(
         node.body
-          .filter((property): property is ClassMethod | ClassProperty => {
-            return property.type === 'ClassMethod' || property.type === 'ClassProperty'
-          })
+          .filter(property => property.type === 'ClassMethod' || property.type === 'ClassProperty')
           .filter(property => property.static)
           .map(async property => {
             return Promise.all([
