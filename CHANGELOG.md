@@ -1,5 +1,11 @@
 
 
+## [0.1.0-beta.5](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2025-05-08)
+
+### Bug Fixes
+
+* prototype value and ppmm ([f11220a](https://github.com/CyanSalt/parseport/commit/f11220a376ac29fbabfeaf2915585c99db7ef1aa))
+
 ## [0.1.0-beta.4](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2025-05-08)
 
 ### Features
