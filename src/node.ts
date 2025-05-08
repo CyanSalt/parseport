@@ -8,6 +8,10 @@ import { analyzeScopes, resolveReferences } from './scope'
 import type { ParseportOptions, ParseportResult } from './types'
 import { parseport } from '.'
 
+interface Constructor {
+  new (...args: unknown[]): unknown,
+}
+
 export const PARSEPORT_UNKNOWN = Symbol('PARSEPORT_UNKNOWN')
 
 const PARSEPORT_RELATED = Symbol('PARSEPORT_RELATED')
@@ -233,16 +237,21 @@ function createHelpers(
       }, initialValue),
     }
   }
-  const applyStatic = async (
+  const emulate = async (
     callee: Function,
     lazyArgs: ((() => ParseportResult | Promise<ParseportResult>) | Node)[],
+    reflection: 'apply' | 'construct',
   ) => {
     if (isMarkedAsSafe(callee)) {
       const args = await Promise.all(
         lazyArgs.map(argument => (typeof argument === 'function' ? argument() : evaluate(argument))),
       )
       return {
-        value: markAsSafe(callee(...args.map(arg => arg.value))),
+        value: markAsSafe(
+          reflection === 'construct'
+            ? new (callee as Constructor)(...args.map(arg => arg.value))
+            : callee(...args.map(arg => arg.value)),
+        ),
       }
     }
     return {
@@ -293,7 +302,7 @@ function createHelpers(
     evaluate,
     parseportDeep,
     evaluateReference,
-    applyStatic,
+    emulate,
     evaluateProperty,
     evaluateExports,
   }
@@ -309,7 +318,7 @@ async function analyzeNode(
     evaluate,
     parseportDeep,
     evaluateReference,
-    applyStatic,
+    emulate,
     evaluateProperty,
     evaluateExports,
   } = createHelpers(values, scopes, options)
@@ -460,15 +469,18 @@ async function analyzeNode(
       }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return applyStatic(callee, node.arguments)
+        return emulate(callee, node.arguments, 'apply')
       }
       return { value: PARSEPORT_UNKNOWN }
     }
-    case 'ClassDeclaration':
-    case 'ClassExpression': {
+    case 'ClassBody': {
       return {
         value: class {},
       }
+    }
+    case 'ClassDeclaration':
+    case 'ClassExpression': {
+      return evaluate(node.body)
     }
     case 'ConditionalExpression': {
       const { value: test } = await evaluate(node.test)
@@ -575,6 +587,13 @@ async function analyzeNode(
       if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       return evaluateProperty(object as {}, node.property, node.computed)
     }
+    case 'NewExpression': {
+      const { value: callee } = await evaluate(node.callee)
+      if (typeof callee === 'function') {
+        return emulate(callee, node.arguments, 'construct')
+      }
+      return { value: PARSEPORT_UNKNOWN }
+    }
     case 'ObjectExpression': {
       const SPREAD = Symbol('...')
       const chunks = await Promise.all(node.properties.map(async property => {
@@ -602,7 +621,7 @@ async function analyzeNode(
     case 'OptionalCallExpression': {
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return applyStatic(callee, node.arguments)
+        return emulate(callee, node.arguments, 'apply')
       }
       if (callee === undefined || callee === null) return { value: undefined }
       return { value: PARSEPORT_UNKNOWN }
@@ -629,7 +648,7 @@ async function analyzeNode(
     case 'TaggedTemplateExpression': {
       const { value: callee } = await evaluate(node.tag)
       if (typeof callee === 'function') {
-        return applyStatic(callee, [
+        return emulate(callee, [
           async () => {
             const quasis = await Promise.all(node.quasi.quasis.map(element => evaluate(element)))
             return {
@@ -637,7 +656,7 @@ async function analyzeNode(
             }
           },
           ...node.quasi.expressions,
-        ])
+        ], 'apply')
       }
       return { value: PARSEPORT_UNKNOWN }
     }

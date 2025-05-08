@@ -336,6 +336,27 @@ describe('parseportCode', () => {
     })
   })
 
+  test('constructor', async () => {
+    const result = await parseportCode(
+      `
+      export const foo = new Foo()
+      `,
+      {
+        variables: {
+          // eslint-disable-next-line object-shorthand
+          Foo: function () {
+            this.name = 'bar'
+          },
+        },
+      },
+    )
+    expect(result.value).toEqual({
+      foo: {
+        name: 'bar',
+      },
+    })
+  })
+
   test('function', async () => {
     const result = await parseportCode(
       `
