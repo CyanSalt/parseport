@@ -1,5 +1,6 @@
-import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression } from '@babel/types'
+import type { BinaryExpression, ClassMethod, ClassProperty, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression } from '@babel/types'
 import { isExpression, isFlow, isIdentifier, isJSX, isLiteral, isTypeScript } from '@babel/types'
+import type { ObjectPropertyLike } from 'ast-kit'
 import { resolveLiteral, resolveString } from 'ast-kit'
 import globals from 'globals'
 import { tryResolveObjectKey } from './ast-utils'
@@ -474,9 +475,26 @@ async function analyzeNode(
       return { value: PARSEPORT_UNKNOWN }
     }
     case 'ClassBody': {
-      return {
-        value: class {},
+      const chunks = await Promise.all(
+        node.body
+          .filter((property): property is ClassMethod | ClassProperty => {
+            return property.type === 'ClassMethod' || property.type === 'ClassProperty'
+          })
+          .filter(property => property.static)
+          .map(async property => {
+            return Promise.all([
+              evaluate(property),
+              tryResolveObjectKey(property as unknown as ObjectPropertyLike),
+            ])
+          }),
+      )
+      let value = class {}
+      for (const [{ value: member }, name] of chunks) {
+        if (name !== undefined) {
+          value[name] = member
+        }
       }
+      return { value }
     }
     case 'ClassDeclaration':
     case 'ClassExpression': {
@@ -558,6 +576,7 @@ async function analyzeNode(
     case 'File': {
       return evaluate(node.program)
     }
+    case 'ClassMethod':
     case 'FunctionDeclaration':
     case 'FunctionExpression':
     case 'ObjectMethod': {
@@ -616,8 +635,10 @@ async function analyzeNode(
       }
       return { value }
     }
-    case 'ObjectProperty':
-      return evaluate(node.value)
+    case 'ClassProperty':
+    case 'ObjectProperty': {
+      return node.value ? evaluate(node.value) : { value: undefined }
+    }
     case 'OptionalCallExpression': {
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {

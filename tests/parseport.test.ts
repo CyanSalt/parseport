@@ -302,6 +302,23 @@ describe('parseportCode', () => {
     })
   })
 
+  test('static class properties', async () => {
+    const result = await parseportCode(
+      `
+      export class Foo {
+        static bar() {
+          return 42
+        }
+      }
+      `,
+    )
+    expect(result.value).toEqual({
+      Foo: expect.any(Function),
+    })
+    const value = result.value as { Foo: { bar: () => unknown } }
+    expect(value.Foo.bar()).toBe(42)
+  })
+
   test('ternary', async () => {
     const result = await parseportCode(
       `export const value = 1 ? 2 : 3`,
