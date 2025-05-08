@@ -1,4 +1,4 @@
-import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression } from '@babel/types'
+import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression, UpdateExpression } from '@babel/types'
 import { isExpression, isFlow, isIdentifier, isJSX, isLiteral, isTypeScript } from '@babel/types'
 import type { ObjectPropertyLike } from 'ast-kit'
 import { resolveLiteral, resolveString } from 'ast-kit'
@@ -77,13 +77,13 @@ function callBinary(a: unknown, b: unknown, operator: (a: unknown, b: unknown) =
   return operator(a, b)
 }
 
-type UnaryOperator = UnaryExpression['operator']
+type UnaryOperator = UnaryExpression['operator'] | UpdateExpression['operator']
 type CalculationOperator = '+' | '-' | '/' | '%' | '*' | '**' | '&' | '|' | '>>' | '>>>' | '<<' | '^'
 type BinaryOperator = BinaryExpression['operator'] | LogicalExpression['operator']
 type AssignmentOperator = `${CalculationOperator | LogicalExpression['operator']}=`
 
 /* eslint-disable no-implicit-coercion, no-bitwise */
-function getUnaryOperator(operator: UnaryOperator) {
+function getUnaryOperator(operator: UnaryOperator, prefix: boolean) {
   switch (operator) {
     case 'void':
       return (value: any) => void value
@@ -97,6 +97,10 @@ function getUnaryOperator(operator: UnaryOperator) {
       return (value: any) => ~value
     case 'typeof':
       return (value: any) => typeof value
+    case '++':
+      return (value: any) => (prefix ? value + (typeof value === 'bigint' ? 1n : 1) : value)
+    case '--':
+      return (value: any) => (prefix ? value - ((typeof value === 'bigint' ? 1n : 1) as never) : value)
     case 'throw':
     case 'delete':
     default:
@@ -240,18 +244,20 @@ function createHelpers(
   }
   const emulate = async (
     callee: Function,
+    lazyThisArg: (() => ParseportResult | Promise<ParseportResult>) | Node | undefined,
     lazyArgs: ((() => ParseportResult | Promise<ParseportResult>) | Node)[],
     reflection: 'apply' | 'construct',
   ) => {
     if (isMarkedAsSafe(callee)) {
-      const args = await Promise.all(
-        lazyArgs.map(argument => (typeof argument === 'function' ? argument() : evaluate(argument))),
-      )
+      const [thisArg, ...args] = await Promise.all([
+        typeof lazyThisArg === 'function' ? lazyThisArg() : (lazyThisArg ? evaluate(lazyThisArg) : { value: undefined }),
+        ...lazyArgs.map(argument => (typeof argument === 'function' ? argument() : evaluate(argument))),
+      ])
       return {
         value: markAsSafe(
           reflection === 'construct'
             ? new (callee as Constructor)(...args.map(arg => arg.value))
-            : callee(...args.map(arg => arg.value)),
+            : callee.call(thisArg.value, ...args.map(arg => arg.value)),
         ),
       }
     }
@@ -470,7 +476,10 @@ async function analyzeNode(
       }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return emulate(callee, node.arguments, 'apply')
+        const thisArg = node.callee.type === 'MemberExpression'
+          ? node.callee.object
+          : undefined
+        return emulate(callee, thisArg, node.arguments, 'apply')
       }
       return { value: PARSEPORT_UNKNOWN }
     }
@@ -607,7 +616,7 @@ async function analyzeNode(
     case 'NewExpression': {
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return emulate(callee, node.arguments, 'construct')
+        return emulate(callee, undefined, node.arguments, 'construct')
       }
       return { value: PARSEPORT_UNKNOWN }
     }
@@ -640,7 +649,10 @@ async function analyzeNode(
     case 'OptionalCallExpression': {
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
-        return emulate(callee, node.arguments, 'apply')
+        const thisArg = node.callee.type === 'MemberExpression'
+          ? node.callee.object
+          : undefined
+        return emulate(callee, thisArg, node.arguments, 'apply')
       }
       if (callee === undefined || callee === null) return { value: undefined }
       return { value: PARSEPORT_UNKNOWN }
@@ -667,7 +679,10 @@ async function analyzeNode(
     case 'TaggedTemplateExpression': {
       const { value: callee } = await evaluate(node.tag)
       if (typeof callee === 'function') {
-        return emulate(callee, [
+        const thisArg = node.tag.type === 'MemberExpression'
+          ? node.tag.object
+          : undefined
+        return emulate(callee, thisArg, [
           async () => {
             const quasis = await Promise.all(node.quasi.quasis.map(element => evaluate(element)))
             return {
@@ -683,8 +698,9 @@ async function analyzeNode(
       return {
         value: node.value.cooked ?? node.value.raw,
       }
-    case 'UnaryExpression': {
-      const operator = getUnaryOperator(node.operator)
+    case 'UnaryExpression':
+    case 'UpdateExpression': {
+      const operator = getUnaryOperator(node.operator, node.prefix)
       if (operator === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       const { value: argument } = await evaluate(node.argument)
       return { value: callUnary(argument, operator) }

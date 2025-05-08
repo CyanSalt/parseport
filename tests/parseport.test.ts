@@ -579,4 +579,27 @@ describe('parseportCode', () => {
     })
   })
 
+  test('this argument', async () => {
+    const result = await parseportCode(
+      `
+      export default ' abc '.trim()
+      `,
+    )
+    expect(result.value).toEqual({
+      default: 'abc',
+    })
+  })
+
+  test('bigint increment', async () => {
+    const result = await parseportCode(
+      `
+      let foo = 1n
+      export default ++foo
+      `,
+    )
+    expect(result.value).toEqual({
+      default: 2n,
+    })
+  })
+
 })
