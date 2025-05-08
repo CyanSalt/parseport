@@ -1,5 +1,12 @@
 
 
+## [0.1.0-beta.4](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2025-05-08)
+
+### Features
+
+* support external classes ([11070d9](https://github.com/CyanSalt/parseport/commit/11070d9431d1d7fe9daffafbdfe92753267d25f4))
+* support static class properties ([e46986e](https://github.com/CyanSalt/parseport/commit/e46986ec47b223d98799c416a1c376467f3bab9a))
+
 ## [0.1.0-beta.3](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2025-04-07)
 
 ### Features
