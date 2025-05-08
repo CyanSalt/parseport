@@ -84,7 +84,7 @@ You can customize the file loading process through `loader`.
 ```ts
 const { value } = await parseport('./file', {
   meta: import.meta,
-  load: file => {
+  loader: file => {
     // ...
   },
 })
