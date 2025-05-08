@@ -23,6 +23,17 @@ value.name // 'my-module'
 value.default() // 'My name is "my-module"'
 ```
 
+> [!NOTE]
+> Parseport is NOT an evaluator. Actually, it only analyzes JS/TS module exports. This means that the following code will not be evaluated correctly (instead, it evaluates to a function that always returns a fixed value):
+> ```js
+> export let name = 'my-module'
+>
+> export default function () {
+>   name = 'still ' + name
+>   return `My name is "${name}"`
+> }
+> ```
+
 ## Usage
 
 ```ts
