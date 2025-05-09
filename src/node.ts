@@ -16,7 +16,6 @@ interface Constructor {
 export const PARSEPORT_UNKNOWN = Symbol('PARSEPORT_UNKNOWN')
 
 const PARSEPORT_RELATED_MAP = new WeakMap<WeakKey, unknown>()
-const PARSEPORT_SAFE_SET = new WeakSet<WeakKey>()
 
 export async function parseportNode(node: Node, options?: ParseportOptions) {
   const values = new Map()
@@ -24,30 +23,54 @@ export async function parseportNode(node: Node, options?: ParseportOptions) {
   return evaluateNode(node, values, scopes, options)
 }
 
+function isObject(value: unknown): value is object {
+  return Boolean(value && (typeof value === 'object' || typeof value === 'function'))
+}
+
 function attachRelated(value: unknown, related: unknown) {
-  if (value && (typeof value === 'object' || typeof value === 'function')) {
+  if (isObject(value)) {
     PARSEPORT_RELATED_MAP.set(value, related)
   }
   return value
 }
 
 function extractRelated(value: unknown) {
-  if (value && (typeof value === 'object' || typeof value === 'function')) {
+  if (isObject(value)) {
     return PARSEPORT_RELATED_MAP.has(value) ? PARSEPORT_RELATED_MAP.get(value) : PARSEPORT_UNKNOWN
   }
   return PARSEPORT_UNKNOWN
 }
 
+const PARSEPORT_SAFE = Symbol('PARSEPORT_SAFE')
+
 function markAsSafe(value: unknown) {
-  if (value && (typeof value === 'object' || typeof value === 'function')) {
-    PARSEPORT_SAFE_SET.add(value)
+  if (isObject(value)) {
+    return new Proxy(value, {
+      apply(target, thisArg, argArray) {
+        return markAsSafe(Reflect.apply(target as Function, thisArg, argArray))
+      },
+      construct(target, argArray, newTarget) {
+        return markAsSafe(Reflect.construct(target as Constructor, argArray, newTarget))
+      },
+      get(target, property, receiver) {
+        return markAsSafe(Reflect.get(target, property, receiver))
+      },
+      has(target, property) {
+        if (property === PARSEPORT_SAFE) return true
+        return Reflect.has(target, property)
+      },
+      // Treat metadata as unsafe intentionally
+      // getOwnPropertyDescriptor: ...,
+      // Prototype might be unsafe
+      // getPrototypeOf: ...,
+    })
   }
   return value
 }
 
 function isMarkedAsSafe(value: unknown) {
-  if (value && (typeof value === 'object' || typeof value === 'function')) {
-    return PARSEPORT_SAFE_SET.has(value)
+  if (isObject(value)) {
+    return PARSEPORT_SAFE in value
   }
   // Primitives are always safe
   return true

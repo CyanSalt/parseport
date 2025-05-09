@@ -195,3 +195,20 @@ const { value } = await parseportCode(`
   },
 })
 ```
+
+**Limitation**: Values from `modules` and `variables` ​​are proxied during the parseport traversing for security, which may result the `value` containing proxies. This means that comparing it with the passed value may fail.
+
+```ts
+let foo = {}
+
+const { value } = await parseportCode(`
+  export * as foo from 'foo'
+`, {
+  meta: import.meta,
+  modules: {
+    foo,
+  },
+})
+
+value.foo === foo // false
+```
