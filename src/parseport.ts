@@ -3,7 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ResolverFactory } from 'oxc-resolver'
 import { parseportFile } from './file'
-import { PARSEPORT_UNKNOWN } from './node'
+import { PARSEPORT_UNKNOWN } from './reflect'
 import type { ParseportOptions } from './types'
 
 export interface ParseportDeepImportMeta {

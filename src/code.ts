@@ -1,6 +1,7 @@
 import type { Node } from '@babel/types'
 import { babelParse, getLang } from 'ast-kit'
-import { PARSEPORT_UNKNOWN, parseportNode } from './node'
+import { parseportNode } from './node'
+import { PARSEPORT_UNKNOWN } from './reflect'
 import type { ParseportOptions } from './types'
 
 const PARSEPORT_EVALUATED = Symbol('PARSEPORT_EVALUATED')

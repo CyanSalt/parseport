@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import { parseportCode } from './code'
-import { PARSEPORT_UNKNOWN } from './node'
+import { PARSEPORT_UNKNOWN } from './reflect'
 import type { ParseportOptions } from './types'
 
 export type ParseportLoader = (file: string) => string | Promise<string>

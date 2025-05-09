@@ -2,6 +2,7 @@ import type { CatchClause, ClassDeclaration, Expression, FunctionDeclaration, Fu
 import { isExpression, isIdentifier } from '@babel/types'
 import { resolveString, walkAST } from 'ast-kit'
 import { tryResolveObjectKey } from './ast-utils'
+import { get } from './reflect'
 
 export type NodePath = (value: unknown) => unknown
 
@@ -40,6 +41,7 @@ function resolveChildReferences(
     case 'ArrayPattern':
       return id.elements.flatMap((item, index) => {
         if (item === null) return []
+        // Array values are not considered safe
         const currentPath = item.type === 'RestElement'
           ? (value: unknown[]) => value.slice(index)
           : (value: unknown[]) => value[index]
@@ -57,6 +59,7 @@ function resolveChildReferences(
           if (!extractedKeys.every(key => key !== undefined)) {
             return resolveChildReferences(item, null, [])
           }
+          // This involves object constructing and is not considered safe
           const currentPath = (value: {}) => Object.fromEntries(
             Object.entries(value).filter(([key]) => !extractedKeys.includes(key)),
           )
@@ -69,7 +72,7 @@ function resolveChildReferences(
           const index = properties.indexOf(item)
           const key = extractedKeys[index]
           if (typeof key === 'string') {
-            const currentPath = (value: {}) => value[key]
+            const currentPath = (value: {}) => get(value, key)
             return resolveChildReferences(
               item.value,
               init,
@@ -106,7 +109,7 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
           case 'ImportDefaultSpecifier': {
             const currentPath = (value: { default: unknown }) => {
               // ES Module Interop
-              return 'default' in value ? value.default : value
+              return 'default' in value ? get(value, 'default') : value
             }
             return {
               name: resolveString(specifier.local),
@@ -116,7 +119,7 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
           }
           case 'ImportSpecifier': {
             const key = resolveString(specifier.imported)
-            const currentPath = (value: {}) => value[key]
+            const currentPath = (value: {}) => get(value, key)
             return {
               name: resolveString(specifier.local),
               init: node,

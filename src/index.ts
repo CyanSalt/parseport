@@ -9,4 +9,6 @@ export { parseportFile, defaultLoader } from './file'
 export type { ParseportParser, ParseportNode } from './code'
 export { parseportCode, defaultParser, createEvaluatedNode } from './code'
 
-export { PARSEPORT_UNKNOWN, parseportNode } from './node'
+export { parseportNode } from './node'
+
+export { PARSEPORT_UNKNOWN, markAsSafe, isMarkedAsSafe } from './reflect'

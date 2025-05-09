@@ -4,16 +4,12 @@ import type { ObjectPropertyLike } from 'ast-kit'
 import { resolveLiteral, resolveString } from 'ast-kit'
 import globals from 'globals'
 import { tryResolveObjectKey } from './ast-utils'
+import type { Constructor } from './reflect'
+import { apply, construct, get, isMarkedAsSafe, markAsSafe, PARSEPORT_UNKNOWN } from './reflect'
 import type { Scope } from './scope'
 import { analyzeScopes, resolveReferences } from './scope'
 import type { ParseportOptions, ParseportResult } from './types'
 import { parseport } from '.'
-
-interface Constructor {
-  new (...args: unknown[]): unknown,
-}
-
-export const PARSEPORT_UNKNOWN = Symbol('PARSEPORT_UNKNOWN')
 
 const PARSEPORT_RELATED_MAP = new WeakMap<WeakKey, unknown>()
 
@@ -39,41 +35,6 @@ function extractRelated(value: unknown) {
     return PARSEPORT_RELATED_MAP.has(value) ? PARSEPORT_RELATED_MAP.get(value) : PARSEPORT_UNKNOWN
   }
   return PARSEPORT_UNKNOWN
-}
-
-const PARSEPORT_SAFE = Symbol('PARSEPORT_SAFE')
-
-function markAsSafe(value: unknown) {
-  if (isObject(value)) {
-    return new Proxy(value, {
-      apply(target, thisArg, argArray) {
-        return markAsSafe(Reflect.apply(target as Function, thisArg, argArray))
-      },
-      construct(target, argArray, newTarget) {
-        return markAsSafe(Reflect.construct(target as Constructor, argArray, newTarget))
-      },
-      get(target, property, receiver) {
-        return markAsSafe(Reflect.get(target, property, receiver))
-      },
-      has(target, property) {
-        if (property === PARSEPORT_SAFE) return true
-        return Reflect.has(target, property)
-      },
-      // Treat metadata as unsafe intentionally
-      // getOwnPropertyDescriptor: ...,
-      // Prototype might be unsafe
-      // getPrototypeOf: ...,
-    })
-  }
-  return value
-}
-
-function isMarkedAsSafe(value: unknown) {
-  if (isObject(value)) {
-    return PARSEPORT_SAFE in value
-  }
-  // Primitives are always safe
-  return true
 }
 
 async function evaluateNode(
@@ -277,11 +238,9 @@ function createHelpers(
         ...lazyArgs.map(argument => (typeof argument === 'function' ? argument() : evaluate(argument))),
       ])
       return {
-        value: markAsSafe(
-          reflection === 'construct'
-            ? new (callee as Constructor)(...args.map(arg => arg.value))
-            : callee.call(thisArg.value, ...args.map(arg => arg.value)),
-        ),
+        value: reflection === 'construct'
+          ? construct(callee as Constructor, args.map(arg => arg.value))
+          : apply(callee, thisArg.value, args.map(arg => arg.value)),
       }
     }
     return {
@@ -296,16 +255,14 @@ function createHelpers(
     if (computed) {
       const { value: property } = await evaluate(propertyNode)
       if (property === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
-      const value = object[property as PropertyKey]
       return {
-        value: isMarkedAsSafe(object) ? markAsSafe(value) : value,
+        value: get(object, property as PropertyKey),
       }
     } else {
       if (isIdentifier(propertyNode) || isLiteral(propertyNode)) {
         const property = resolveString(propertyNode)
-        const value = object[property]
         return {
-          value: isMarkedAsSafe(object) ? markAsSafe(value) : value,
+          value: get(object, property),
         }
       } else {
         return {
