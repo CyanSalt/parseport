@@ -1,5 +1,11 @@
 
 
+## [0.1.1](https://github.com/CyanSalt/parseport/compare/v0.1.0...v0.1.1) (2025-05-09)
+
+### Bug Fixes
+
+* safe modules and proxies ([9b0247e](https://github.com/CyanSalt/parseport/commit/9b0247e8c32b94b9768bfcfe3bbc704bc2fa9539))
+
 ## [0.1.0](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.5...v0.1.0) (2025-05-09)
 
 ### Bug Fixes
