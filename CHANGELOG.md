@@ -1,5 +1,11 @@
 
 
+## [0.1.0](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.5...v0.1.0) (2025-05-09)
+
+### Bug Fixes
+
+* external frozen objects ([ae420d6](https://github.com/CyanSalt/parseport/commit/ae420d6947e5cfe67e945c10607a6f7db88d16ee))
+
 ## [0.1.0-beta.5](https://github.com/CyanSalt/parseport/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2025-05-08)
 
 ### Bug Fixes
