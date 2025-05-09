@@ -15,8 +15,8 @@ interface Constructor {
 
 export const PARSEPORT_UNKNOWN = Symbol('PARSEPORT_UNKNOWN')
 
-const PARSEPORT_RELATED = Symbol('PARSEPORT_RELATED')
-const PARSEPORT_SAFE = Symbol('PARSEPORT_SAFE')
+const PARSEPORT_RELATED_MAP = new WeakMap<WeakKey, unknown>()
+const PARSEPORT_SAFE_SET = new WeakSet<WeakKey>()
 
 export async function parseportNode(node: Node, options?: ParseportOptions) {
   const values = new Map()
@@ -26,28 +26,28 @@ export async function parseportNode(node: Node, options?: ParseportOptions) {
 
 function attachRelated(value: unknown, related: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    Object.defineProperty(value, PARSEPORT_RELATED, { value: related })
+    PARSEPORT_RELATED_MAP.set(value, related)
   }
   return value
 }
 
 function extractRelated(value: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    return PARSEPORT_RELATED in value ? value[PARSEPORT_RELATED] : PARSEPORT_UNKNOWN
+    return PARSEPORT_RELATED_MAP.has(value) ? PARSEPORT_RELATED_MAP.get(value) : PARSEPORT_UNKNOWN
   }
   return PARSEPORT_UNKNOWN
 }
 
 function markAsSafe(value: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    Object.defineProperty(value, PARSEPORT_SAFE, { value: true })
+    PARSEPORT_SAFE_SET.add(value)
   }
   return value
 }
 
 function isMarkedAsSafe(value: unknown) {
   if (value && (typeof value === 'object' || typeof value === 'function')) {
-    return PARSEPORT_SAFE in value && value[PARSEPORT_SAFE] as true
+    return PARSEPORT_SAFE_SET.has(value)
   }
   // Primitives are always safe
   return true
