@@ -38,7 +38,7 @@
   "homepage": "https://github.com/CyanSalt/parseport#readme",
   "devDependencies": {
     "@cyansalt/eslint-config": "^4.3.0",
-    "@cyansalt/tsconfig": "^2.2.1",
+    "@cyansalt/tsconfig": "^3.0.0",
     "@release-it/conventional-changelog": "^9.0.3",
     "@types/node": "^22.10.1",
     "eslint": "^9.15.0",
