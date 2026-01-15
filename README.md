@@ -179,7 +179,7 @@ const { value } = await parseportCode(`
 })
 ```
 
-- `modules`: Similar to `variables`, this object can be used to declare modules that you want to replace. The above code is equivalent to the following code:
+- `modules`: Similar to `variables`, this object can be used to declare modules that you want to replace.
 
 ```ts
 const { value } = await parseportCode(`
@@ -192,6 +192,21 @@ const { value } = await parseportCode(`
     lodash: {
       head: array => array[0],
     },
+  },
+})
+```
+
+You can also pass in a Promise or a function to load the implementation dynamically/lazily:
+
+```ts
+const { value } = await parseportCode(`
+  import { head } from 'lodash'
+
+  export default head([1, 2])
+`, {
+  meta: import.meta,
+  modules: {
+    lodash: () => import('lodash-es'),
   },
 })
 ```

@@ -446,13 +446,13 @@ describe('parseportCode', () => {
       `,
       {
         modules: {
-          foo: {
+          foo: Promise.resolve({
             default: 1,
             named: 2,
-          },
-          bar: {
+          }),
+          bar: () => ({
             named: 3,
-          },
+          }),
         },
       },
     )

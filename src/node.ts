@@ -182,10 +182,13 @@ function createHelpers(
   options?: ParseportOptions,
 ) {
   const evaluate = (childNode: Node) => evaluateNode(childNode, values, scopes, options)
-  const parseportDeep = (source: string) => {
+  const parseportDeep = async (source: string) => {
     if (options?.modules && source in options.modules) {
+      const definition = options.modules[source]
       return {
-        value: markAsSafe(options.modules[source]),
+        value: markAsSafe(await (
+          typeof definition === 'function' ? definition() : definition
+        )),
       }
     }
     if (options?.deep) {
