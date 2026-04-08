@@ -43,21 +43,21 @@
   },
   "homepage": "https://github.com/CyanSalt/parseport#readme",
   "devDependencies": {
-    "@cyansalt/eslint-config": "^4.3.0",
-    "@cyansalt/tsconfig": "^3.0.0",
-    "@release-it/conventional-changelog": "^9.0.3",
-    "@types/node": "^22.10.1",
-    "eslint": "^9.15.0",
-    "release-it": "^17.10.0",
-    "tsdown": "^0.16.7",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.6"
+    "@cyansalt/eslint-config": "^4.5.0",
+    "@cyansalt/tsconfig": "^3.0.2",
+    "@release-it/conventional-changelog": "^10.0.6",
+    "@types/node": "^22.19.17",
+    "eslint": "^9.39.4",
+    "release-it": "^19.2.4",
+    "tsdown": "^0.21.7",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.3"
   },
   "dependencies": {
-    "@babel/parser": "^7.26.2",
-    "@babel/types": "^7.26.0",
-    "ast-kit": "^1.3.1",
-    "globals": "^15.12.0",
-    "oxc-resolver": "^2.1.1"
+    "@babel/parser": "^7.29.2",
+    "@babel/types": "^7.29.0",
+    "ast-kit": "^2.2.0",
+    "globals": "^17.4.0",
+    "oxc-resolver": "^11.19.1"
   }
 }
