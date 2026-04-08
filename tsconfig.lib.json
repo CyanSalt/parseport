@@ -2,7 +2,10 @@
   "extends": "@cyansalt/tsconfig",
   "compilerOptions": {
     "composite": true,
-    "noEmit": false
+    "noEmit": false,
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src"

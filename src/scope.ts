@@ -1,4 +1,4 @@
-import type { CatchClause, ClassDeclaration, Expression, FunctionDeclaration, FunctionExpression, ImportDeclaration, LVal, Node, TSEnumDeclaration, TSImportEqualsDeclaration, VariableDeclarator } from '@babel/types'
+import type { CatchClause, ClassDeclaration, Expression, FunctionDeclaration, FunctionExpression, ImportDeclaration, LVal, Node, TSEnumDeclaration, TSImportEqualsDeclaration, VariableDeclarator, VoidPattern } from '@babel/types'
 import { isExpression, isIdentifier } from '@babel/types'
 import { resolveString, walkAST } from 'ast-kit'
 import { tryResolveObjectKey } from './ast-utils'
@@ -23,7 +23,7 @@ interface NamedReference extends Reference {
 }
 
 function resolveChildReferences(
-  id: LVal | Expression,
+  id: LVal | VoidPattern | Expression,
   init: Node | null,
   paths: NodePath[],
 ): NamedReference[] {
@@ -156,6 +156,7 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
     case 'AssignmentPattern':
     case 'ObjectPattern':
     case 'RestElement':
+    case 'VoidPattern':
       return resolveChildReferences(node, null, [])
   }
 }
