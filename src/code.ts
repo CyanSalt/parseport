@@ -46,5 +46,8 @@ export async function parseportCode(code: string, options?: ParseportOptions) {
   if (isEvaluatedNode(ast)) {
     return { value: ast.value }
   }
-  return parseportNode(ast, options)
+  return parseportNode(ast, {
+    ...options,
+    code,
+  })
 }

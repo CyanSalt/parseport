@@ -23,10 +23,32 @@ function isObject(value: unknown): value is object {
   return Boolean(value && (typeof value === 'object' || typeof value === 'function'))
 }
 
+function stringifyNode(node: Node, code: string) {
+  if (typeof node.start === 'number' && typeof node.end === 'number') {
+    return code.slice(node.start, node.end)
+  }
+  return undefined
+}
+
 function attachRelated(value: unknown, related: unknown) {
   if (isObject(value)) {
     PARSEPORT_RELATED_MAP.set(value, related)
   }
+  return value
+}
+
+function attachToString(value: unknown, string: string) {
+  const toString = attachRelated(
+    function toString() {
+      return string
+    },
+    string,
+  )
+  Object.defineProperty(value, 'toString', {
+    configurable: true,
+    writable: true,
+    value: toString,
+  })
   return value
 }
 
@@ -395,10 +417,14 @@ async function analyzeNode(
     case 'ArrowFunctionExpression': {
       // TODO: generator
       const { value: body } = await evaluate(node.body)
+      const fn = node.async
+        ? attachRelated(async () => body, attachRelated(Promise.resolve(body), body))
+        : attachRelated(() => body, body)
+      const string = options?.code
+        ? stringifyNode(node, options.code)
+        : undefined
       return {
-        value: node.async
-          ? attachRelated(async () => body, attachRelated(Promise.resolve(body), body))
-          : attachRelated(() => body, body),
+        value: typeof string === 'string' ? attachToString(fn, string) : fn,
       }
     }
     case 'AssignmentExpression': {
@@ -572,20 +598,24 @@ async function analyzeNode(
     case 'ObjectMethod': {
       // TODO: generator
       const { value: body } = await evaluate(node.body)
+      const fn = node.async
+        ? attachRelated(
+          async function () {
+            return body
+          },
+          attachRelated(Promise.resolve(body), body),
+        )
+        : attachRelated(
+          function () {
+            return body
+          },
+          body,
+        )
+      const string = options?.code
+        ? stringifyNode(node, options.code)
+        : undefined
       return {
-        value: node.async
-          ? attachRelated(
-            async function () {
-              return body
-            },
-            attachRelated(Promise.resolve(body), body),
-          )
-          : attachRelated(
-            function () {
-              return body
-            },
-            body,
-          ),
+        value: typeof string === 'string' ? attachToString(fn, string) : fn,
       }
     }
     case 'Identifier': {

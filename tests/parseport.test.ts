@@ -387,6 +387,11 @@ describe('parseportCode', () => {
     })
     const value = result.value as { fn: () => unknown }
     expect(value.fn()).toBe(42)
+    expect(value.fn.toString()).toBe(
+      `function fn () {
+        return 42
+      }`,
+    )
   })
 
   test('object method', async () => {

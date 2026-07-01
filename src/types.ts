@@ -30,6 +30,11 @@ export interface ParseportOptions {
    */
   file?: string,
   /**
+   * Source code content
+   * Injected by `parseportCode`
+   */
+  code?: string,
+  /**
    * Whether to parseport modules in the source file
    */
   deep?: boolean,
