@@ -1,4 +1,16 @@
+# Changelog
 
+## [0.1.3](https://github.com/CyanSalt/parseport/compare/v0.1.2...v0.1.3) (2026-07-01)
+
+### Features
+
+* support `Function[#to](https://github.com/CyanSalt/parseport/issues/to)String` ([444d50c](https://github.com/CyanSalt/parseport/commit/444d50c4036d43d82c97cb9af06f97b1939084bc))
+
+### Bug Fixes
+
+* fallback exports ([98e2900](https://github.com/CyanSalt/parseport/commit/98e290032a74b51e87bce39868b2914cce937951))
+* support dynamic/lazy load ([23c00f4](https://github.com/CyanSalt/parseport/commit/23c00f42346eb1c49c21b95c77b80df343eb271c))
+* void pattern ([de6d510](https://github.com/CyanSalt/parseport/commit/de6d51027a4157850c3023ad2633c11286903c91))
 
 ## [0.1.2](https://github.com/CyanSalt/parseport/compare/v0.1.1...v0.1.2) (2025-05-09)
 
