@@ -1,5 +1,6 @@
 import type { ParseportParser } from './code'
 import type { ParseportLoader } from './file'
+import type { ParseportTransformer } from './node'
 import type { ParseportResolver } from './index'
 
 export interface ParseportOptions {
@@ -19,6 +20,10 @@ export interface ParseportOptions {
    * Transformer who make code -> node
    */
   parser?: ParseportParser,
+  /**
+   * Transformer who make node -> result
+   */
+  transformer?: ParseportTransformer,
   /**
    * Source file language
    * Could be detected automatically from the file name

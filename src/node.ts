@@ -1,9 +1,16 @@
-import type { BinaryExpression, Declaration, Expression, LogicalExpression, MemberExpression, Node, Statement, UnaryExpression, UpdateExpression } from '@babel/types'
-import { isExpression, isFlow, isIdentifier, isJSX, isLiteral, isTypeScript } from '@babel/types'
-import type { ObjectPropertyLike } from 'ast-kit'
-import { resolveLiteral, resolveString } from 'ast-kit'
+import type {
+  AssignmentOperator,
+  BinaryOperator,
+  Declaration,
+  LogicalOperator,
+  MemberExpression,
+  Node,
+  Statement,
+  UnaryOperator,
+  UpdateOperator,
+} from '@oxc-project/types'
 import globals from 'globals'
-import { tryResolveObjectKey } from './ast-utils'
+import { isExpression, isIdentifier, isJSX, isLiteral, isTypeScript, resolveLiteral, resolveString, tryResolveObjectKey } from './ast-utils'
 import type { Constructor } from './reflect'
 import { apply, construct, get, isMarkedAsSafe, markAsSafe, PARSEPORT_UNKNOWN } from './reflect'
 import type { Scope } from './scope'
@@ -13,7 +20,12 @@ import { parseport } from '.'
 
 const PARSEPORT_RELATED_MAP = new WeakMap<WeakKey, unknown>()
 
-export async function parseportNode(node: Node, options?: ParseportOptions) {
+export type ParseportTransformer = (
+  node: Node,
+  options?: ParseportOptions,
+) => ParseportResult | Promise<ParseportResult>
+
+export const parseportNode: ParseportTransformer = async (node: Node, options?: ParseportOptions) => {
   const values = new Map()
   const scopes = analyzeScopes(node)
   return evaluateNode(node, values, scopes, options)
@@ -83,13 +95,11 @@ function callBinary(a: unknown, b: unknown, operator: (a: unknown, b: unknown) =
   return operator(a, b)
 }
 
-type UnaryOperator = UnaryExpression['operator'] | UpdateExpression['operator']
-type CalculationOperator = '+' | '-' | '/' | '%' | '*' | '**' | '&' | '|' | '>>' | '>>>' | '<<' | '^'
-type BinaryOperator = BinaryExpression['operator'] | LogicalExpression['operator']
-type AssignmentOperator = `${CalculationOperator | LogicalExpression['operator']}=`
+type GeneralizedUnaryOperator = UnaryOperator | UpdateOperator
+type GeneralizedBinaryOperator = BinaryOperator | LogicalOperator
 
 /* eslint-disable no-implicit-coercion, no-bitwise */
-function getUnaryOperator(operator: UnaryOperator, prefix: boolean) {
+function getUnaryOperator(operator: GeneralizedUnaryOperator, prefix: boolean) {
   switch (operator) {
     case 'void':
       return (value: any) => void value
@@ -107,7 +117,6 @@ function getUnaryOperator(operator: UnaryOperator, prefix: boolean) {
       return (value: any) => (prefix ? value + (typeof value === 'bigint' ? 1n : 1) : value)
     case '--':
       return (value: any) => (prefix ? value - ((typeof value === 'bigint' ? 1n : 1) as never) : value)
-    case 'throw':
     case 'delete':
     default:
       return PARSEPORT_UNKNOWN
@@ -116,7 +125,7 @@ function getUnaryOperator(operator: UnaryOperator, prefix: boolean) {
 /* eslint-enable no-implicit-coercion */
 
 /* eslint-disable no-bitwise, eqeqeq */
-function getBinaryOperator(operator: BinaryOperator | AssignmentOperator) {
+function getBinaryOperator(operator: GeneralizedBinaryOperator | AssignmentOperator) {
   switch (operator) {
     case '+':
     case '+=':
@@ -183,9 +192,6 @@ function getBinaryOperator(operator: BinaryOperator | AssignmentOperator) {
     case '??':
     case '??=':
       return (a: any, b: any) => a ?? b
-    // Proposal: pipeline operator
-    case '|>':
-      return (a: any, b: any) => b(a)
     default:
       return PARSEPORT_UNKNOWN
   }
@@ -193,9 +199,13 @@ function getBinaryOperator(operator: BinaryOperator | AssignmentOperator) {
 /* eslint-enable no-bitwise, eqeqeq */
 
 function getDeclarationName(declaration: Declaration) {
-  return 'id' in declaration && declaration.id
-    ? resolveString(declaration.id)
-    : undefined
+  if ('id' in declaration && declaration.id) {
+    if (declaration.id.type === 'TSQualifiedName') {
+      return declaration.id.right.name
+    }
+    return resolveString(declaration.id)
+  }
+  return undefined
 }
 
 function createHelpers(
@@ -337,12 +347,12 @@ async function analyzeNode(
   if (isJSX(node)) {
     return { value: PARSEPORT_UNKNOWN }
   }
-  if (isTypeScript(node) || isFlow(node)) {
+  if (isTypeScript(node)) {
     if (isExpression(node)) {
       return evaluate(node.expression)
     }
     switch (node.type) {
-      case 'TSEnumDeclaration': {
+      case 'TSEnumBody': {
         const chunks = await Promise.all(node.members.map(member => {
           return Promise.all([
             member.initializer ? evaluate(member.initializer) : undefined,
@@ -367,8 +377,10 @@ async function analyzeNode(
         return evaluate(node.moduleReference)
       case 'TSModuleBlock':
         return evaluateExports(node.body)
-      case 'TSModuleDeclaration':
+      case 'TSEnumDeclaration':
         return evaluate(node.body)
+      case 'TSModuleDeclaration':
+        return node.body ? evaluate(node.body) : { value: PARSEPORT_UNKNOWN }
       default:
         return { value: PARSEPORT_UNKNOWN }
     }
@@ -376,7 +388,7 @@ async function analyzeNode(
   if (isLiteral(node)) {
     if (node.type === 'TemplateLiteral') {
       const expressions = await Promise.all(
-        (node.expressions as Expression[]).map(expr => evaluate(expr)),
+        node.expressions.map(expr => evaluate(expr)),
       )
       return {
         value: node.quasis.reduce((full, part, index) => {
@@ -415,7 +427,6 @@ async function analyzeNode(
       return { value }
     }
     case 'ArrowFunctionExpression': {
-      // TODO: generator
       const { value: body } = await evaluate(node.body)
       const fn = node.async
         ? attachRelated(async () => body, attachRelated(Promise.resolve(body), body))
@@ -431,7 +442,7 @@ async function analyzeNode(
       if (node.operator === '=') {
         return evaluate(node.right)
       }
-      const operator = getBinaryOperator(node.operator as AssignmentOperator)
+      const operator = getBinaryOperator(node.operator)
       if (operator === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
       const [{ value: left }, { value: right }] = await Promise.all([
         evaluate(node.left),
@@ -472,17 +483,9 @@ async function analyzeNode(
       if (!firstReturnStatement || firstReturnStatement.type === 'ThrowStatement') return { value: PARSEPORT_UNKNOWN }
       return evaluate(firstReturnStatement)
     }
+    case 'ChainExpression':
+      return evaluate(node.expression)
     case 'CallExpression': {
-      // Dynamic import
-      if (node.callee.type === 'Import') {
-        if (options?.deep) {
-          const { value: source } = await evaluate(node.arguments[0])
-          if (typeof source === 'string') {
-            return parseportDeep(source)
-          }
-        }
-        return { value: attachRelated(Promise.resolve(PARSEPORT_UNKNOWN), PARSEPORT_UNKNOWN) }
-      }
       const { value: callee } = await evaluate(node.callee)
       if (typeof callee === 'function') {
         const thisArg = node.callee.type === 'MemberExpression'
@@ -490,24 +493,35 @@ async function analyzeNode(
           : undefined
         return emulate(callee, thisArg, node.arguments, 'apply')
       }
+      if (node.optional && (callee === undefined || callee === null)) {
+        return { value: undefined }
+      }
       return { value: PARSEPORT_UNKNOWN }
     }
     case 'ClassBody': {
-      const chunks = await Promise.all(
-        node.body
-          .filter(property => property.type === 'ClassMethod' || property.type === 'ClassProperty')
-          .filter(property => property.static)
-          .map(async property => {
-            return Promise.all([
-              evaluate(property),
-              tryResolveObjectKey(property as unknown as ObjectPropertyLike),
-            ])
-          }),
-      )
+      const staticMembers = node.body.flatMap(property => {
+        switch (property.type) {
+          case 'AccessorProperty':
+          case 'MethodDefinition':
+          case 'PropertyDefinition':
+          case 'TSAbstractAccessorProperty':
+          case 'TSAbstractMethodDefinition':
+          case 'TSAbstractPropertyDefinition':
+            return property.static ? [property] : []
+          default:
+            return []
+        }
+      })
+      const chunks = await Promise.all(staticMembers.map(async property => {
+        return Promise.all([
+          evaluate(property),
+          tryResolveObjectKey(property),
+        ])
+      }))
       let value = class {}
       for (const [{ value: member }, name] of chunks) {
         if (name !== undefined) {
-          value[name] = member
+          (value as unknown as Record<PropertyKey, unknown>)[name] = member
         }
       }
       return { value }
@@ -523,7 +537,17 @@ async function analyzeNode(
     }
     case 'EmptyStatement':
       return { value: undefined }
-    case 'ExportAllDeclaration':
+    case 'ExportAllDeclaration': {
+      const { value } = await parseportDeep(node.source.value)
+      if (node.exported) {
+        return {
+          value: {
+            [resolveString(node.exported)]: value,
+          },
+        }
+      }
+      return { value }
+    }
     case 'ImportDeclaration': {
       return parseportDeep(node.source.value)
     }
@@ -556,31 +580,14 @@ async function analyzeNode(
         return {
           value: Object.fromEntries(node.specifiers.map(specifier => {
             const name = resolveString(specifier.exported)
-            switch (specifier.type) {
-              case 'ExportNamespaceSpecifier':
-                return [name, value]
-              case 'ExportDefaultSpecifier':
-                return [name, (value as { default: unknown }).default]
-              case 'ExportSpecifier':
-                return [name, (value as {})[resolveString(specifier.local)]]
-              default:
-                return [name, PARSEPORT_UNKNOWN]
-            }
+            return [name, (value as {})[resolveString(specifier.local)]]
           })),
         }
       }
       const chunks = await Promise.all(node.specifiers.map<Promise<[string, unknown]>>(async specifier => {
         const name = resolveString(specifier.exported)
-        switch (specifier.type) {
-          case 'ExportSpecifier': {
-            const { value } = await evaluate(specifier.local)
-            return [name, value]
-          }
-          case 'ExportNamespaceSpecifier':
-          case 'ExportDefaultSpecifier':
-          default:
-            return [name, PARSEPORT_UNKNOWN]
-        }
+        const { value } = await evaluate(specifier.local)
+        return [name, value]
       }))
       return {
         value: Object.fromEntries(chunks),
@@ -589,14 +596,13 @@ async function analyzeNode(
     case 'ExpressionStatement': {
       return evaluate(node.expression)
     }
-    case 'File': {
-      return evaluate(node.program)
-    }
-    case 'ClassMethod':
     case 'FunctionDeclaration':
     case 'FunctionExpression':
-    case 'ObjectMethod': {
-      // TODO: generator
+    case 'TSDeclareFunction':
+    case 'TSEmptyBodyFunctionExpression': {
+      if (!node.body) {
+        return { value: PARSEPORT_UNKNOWN }
+      }
       const { value: body } = await evaluate(node.body)
       const fn = node.async
         ? attachRelated(
@@ -621,9 +627,21 @@ async function analyzeNode(
     case 'Identifier': {
       return evaluateReference(node, node.name)
     }
+    case 'ImportExpression': {
+      if (options?.deep) {
+        const { value: source } = await evaluate(node.source)
+        if (typeof source === 'string') {
+          return parseportDeep(source)
+        }
+      }
+      return { value: attachRelated(Promise.resolve(PARSEPORT_UNKNOWN), PARSEPORT_UNKNOWN) }
+    }
     case 'MemberExpression': {
       const { value: object } = await evaluate(node.object)
       if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
+      if (node.optional && (object === undefined || object === null)) {
+        return { value: undefined }
+      }
       return evaluateProperty(object as {}, node.property, node.computed)
     }
     case 'NewExpression': {
@@ -655,26 +673,16 @@ async function analyzeNode(
       }
       return { value }
     }
-    case 'ClassProperty':
-    case 'ObjectProperty': {
+    case 'ParenthesizedExpression':
+      return evaluate(node.expression)
+    case 'AccessorProperty':
+    case 'MethodDefinition':
+    case 'Property':
+    case 'PropertyDefinition':
+    case 'TSAbstractAccessorProperty':
+    case 'TSAbstractMethodDefinition':
+    case 'TSAbstractPropertyDefinition': {
       return node.value ? evaluate(node.value) : { value: undefined }
-    }
-    case 'OptionalCallExpression': {
-      const { value: callee } = await evaluate(node.callee)
-      if (typeof callee === 'function') {
-        const thisArg = node.callee.type === 'MemberExpression'
-          ? node.callee.object
-          : undefined
-        return emulate(callee, thisArg, node.arguments, 'apply')
-      }
-      if (callee === undefined || callee === null) return { value: undefined }
-      return { value: PARSEPORT_UNKNOWN }
-    }
-    case 'OptionalMemberExpression': {
-      const { value: object } = await evaluate(node.object)
-      if (object === PARSEPORT_UNKNOWN) return { value: PARSEPORT_UNKNOWN }
-      if (object === undefined || object === null) return { value: undefined }
-      return evaluateProperty(object, node.property, node.computed)
     }
     case 'Program': {
       return evaluateExports(node.body)

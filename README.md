@@ -55,7 +55,7 @@ await parseportFile('/path/to/file') // { value: ... }
 
 await parseportCode('export default 2 + [1, 3].length as never', { lang: 'ts' }) // { value: { default: 4 } }
 
-await parseportNode(babelNode) // { value: ... }
+await parseportNode(oxcNode) // { value: ... }
 ```
 
 ### Resolving
@@ -120,9 +120,9 @@ const { value } = await parseport('./file', {
 })
 ```
 
-Parseport will choose different Babel configurations based on `lang`, which will be automatically inferred from `file` when left empty.
+Parseport will choose different OXC parser settings based on `lang`, which will be automatically inferred from `file` when left empty.
 
-`loader` accepts the text content of the file and returns the `Program` node of the Babel AST synchronously or asynchronously. Similarly, thrown in `parser` will also result in `PARSEPORT_UNKNOWN`.
+`parser` accepts the text content of the file and returns an ESTree / TS-ESTree AST node synchronously or asynchronously. The built-in parser returns a `Program` with  [`oxc-parser`](https://github.com/oxc-project/oxc). Similarly, thrown in `parser` will also result in `PARSEPORT_UNKNOWN`.
 
 `parser` also provides integration capabilities with non-JavaScript/TypeScript syntax. For example, you can combine custom parser with the built-in parser.
 

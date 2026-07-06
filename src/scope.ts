@@ -1,7 +1,18 @@
-import type { CatchClause, ClassDeclaration, Expression, FunctionDeclaration, FunctionExpression, ImportDeclaration, LVal, Node, TSEnumDeclaration, TSImportEqualsDeclaration, VariableDeclarator, VoidPattern } from '@babel/types'
-import { isExpression, isIdentifier } from '@babel/types'
-import { resolveString, walkAST } from 'ast-kit'
-import { tryResolveObjectKey } from './ast-utils'
+import type {
+  BindingPattern,
+  BindingRestElement,
+  Class,
+  Expression,
+  Function,
+  ImportDeclaration,
+  Node,
+  ParamPattern,
+  TSEnumDeclaration,
+  TSImportEqualsDeclaration,
+  VariableDeclarator,
+} from '@oxc-project/types'
+import { walk } from 'oxc-walker'
+import { isExpression, isIdentifier, resolveString, tryResolveObjectKey } from './ast-utils'
 import { get } from './reflect'
 
 export type NodePath = (value: unknown) => unknown
@@ -11,19 +22,17 @@ export interface Reference {
   paths: NodePath[],
 }
 
-export type FunctionParam = FunctionDeclaration['params'][number]
-export type CatchParam = NonNullable<CatchClause['param']>
 export type ScopeDeclaration = ImportDeclaration | TSImportEqualsDeclaration
-  | FunctionDeclaration | FunctionExpression | ClassDeclaration | TSEnumDeclaration
+  | Function | Class | TSEnumDeclaration
   | VariableDeclarator
-  | FunctionParam | CatchParam
+  | ParamPattern | BindingPattern
 
 interface NamedReference extends Reference {
   name: string,
 }
 
 function resolveChildReferences(
-  id: LVal | VoidPattern | Expression,
+  id: BindingPattern | BindingRestElement | ParamPattern | Expression,
   init: Node | null,
   paths: NodePath[],
 ): NamedReference[] {
@@ -134,7 +143,10 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
       return resolveChildReferences(node.id, node, [])
     case 'FunctionDeclaration':
     case 'FunctionExpression':
+    case 'TSDeclareFunction':
+    case 'TSEmptyBodyFunctionExpression':
     case 'ClassDeclaration':
+    case 'ClassExpression':
     case 'TSEnumDeclaration':
       if (!node.id) return []
       return [
@@ -150,13 +162,14 @@ export function resolveReferences(node: ScopeDeclaration): NamedReference[] {
         node.init ?? null,
         [],
       )
+    case 'TSParameterProperty':
+      return resolveChildReferences(node.parameter, null, [])
     // Parameter types (without init)
     case 'Identifier':
     case 'ArrayPattern':
     case 'AssignmentPattern':
     case 'ObjectPattern':
     case 'RestElement':
-    case 'VoidPattern':
       return resolveChildReferences(node, null, [])
   }
 }
@@ -206,14 +219,15 @@ export function analyzeScopes(ast: Node) {
   })
   const scopes = new Map<Node, Scope>()
   scopes.set(ast, scope)
-  walkAST(ast, {
+  walk(ast, {
     enter(node, parent) {
-      // TODO: imports
       switch (node.type) {
         case 'ImportDeclaration':
         case 'TSImportEqualsDeclaration':
         case 'FunctionDeclaration':
         case 'FunctionExpression':
+        case 'TSDeclareFunction':
+        case 'TSEmptyBodyFunctionExpression':
         case 'ClassDeclaration':
         case 'TSEnumDeclaration':
           scope.add(node, false)
@@ -229,7 +243,9 @@ export function analyzeScopes(ast: Node) {
       let newScope: Scope | undefined
       switch (node.type) {
         case 'FunctionDeclaration':
-        case 'FunctionExpression': {
+        case 'FunctionExpression':
+        case 'TSDeclareFunction':
+        case 'TSEmptyBodyFunctionExpression': {
           newScope = new Scope({
             node,
             parent: scope,
@@ -251,7 +267,13 @@ export function analyzeScopes(ast: Node) {
           break
         }
         case 'BlockStatement':
-          if (!parent || parent.type !== 'FunctionDeclaration' && parent.type !== 'FunctionExpression') {
+          if (!parent || (
+            parent.type !== 'ArrowFunctionExpression'
+            && parent.type !== 'FunctionDeclaration'
+            && parent.type !== 'FunctionExpression'
+            && parent.type !== 'TSDeclareFunction'
+            && parent.type !== 'TSEmptyBodyFunctionExpression'
+          )) {
             newScope = new Scope({
               node,
               parent: scope,
