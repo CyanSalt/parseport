@@ -129,7 +129,7 @@ function getBinaryOperator(operator: BinaryOperator | AssignmentOperator) {
       return (a: any, b: any) => a / b
     case '%':
     case '%=':
-      return (a: any, b: any) => a / b
+      return (a: any, b: any) => a % b
     case '*':
     case '*=':
       return (a: any, b: any) => a * b
